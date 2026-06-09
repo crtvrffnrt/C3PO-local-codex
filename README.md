@@ -34,9 +34,9 @@ The HTML report is designed as a high-contrast attack-surface console with infra
 
 ## Overview
 
-`C3PO-shodan` takes a root domain, discovers exposed infrastructure with Shodan and DNS data, enriches high-value web targets, runs focused Nuclei scans, and produces local Markdown + HTML artifacts for review.
+`C3PO-shodan` is an External Attack Surface Management (EASM) framework that orchestrates **Codex prompts** (via AI agent workflows) and **bash commands / Python scripts** to discover and map exposed infrastructure. It takes a target root domain, fetches DNS/host metadata using Shodan, detects potential subdomain takeovers, performs targeted Nuclei vulnerability scans, captures web screenshots, and renders interactive reports.
 
-The pipeline is deterministic. Gemini is used for repo workflow and operator assistance around the run, not for generating a separate executive-summary artifact.
+The execution logic is structured to enable LLM-based security agents and human operators to safely direct, validate, and execute complex reconnaissance pipelines.
 
 ## What It Does
 
@@ -113,16 +113,48 @@ chmod +x run.sh bin/run.sh scripts/*.sh install.sh
 ./run.sh example.com
 ```
 
-## Pipeline
+## Pipeline & Execution Flow
 
-| Phase | Action |
-| --- | --- |
-| 1. Validation | Checks config, required files, Python, keys, and optional screenshot tooling. |
-| 2. Discovery | Builds the domain inventory from Shodan DNS, current resolution, and optional CT hostnames. |
-| 3. TXT / takeover enrichment | Adds TXT verification signals and provider-linked CNAME analysis. |
-| 4. Nuclei scan | Scans the top reachable risky web targets with focused tags and severities. |
-| 5. Screenshot capture | Uses Cloudflare URL Scanner first when configured, otherwise local browsers/tools. |
-| 6. Rendering | Produces Markdown and HTML reports plus JSON support artifacts. |
+The tool operates by orchestrating **Codex/Gemini prompts** (via developer-agent workspaces and the `gemini` CLI) alongside **native bash commands and Python helper scripts** to automate end-to-end attack-surface mapping. 
+
+The execution runs through the following sequence of phases:
+
+### Phase 1: Preflight & Validation
+- **Commands**: [install.sh](file:///tmp/C3PO-Shodan-codex/install.sh) and [scripts/validate.sh](file:///tmp/C3PO-Shodan-codex/scripts/validate.sh)
+- **Mechanism**: Verifies environment dependencies (`python3`, `curl`, `nuclei`, `httpx`, and the `gemini` CLI) and API keys (such as `SHODANAPI` and optionally Cloudflare details). 
+- **Orchestration**: Ensures the workspace context and target inputs are formatted correctly before starting execution.
+
+### Phase 2: Shodan-Driven Discovery
+- **Commands**: [scripts/orchestrate.py](file:///tmp/C3PO-Shodan-codex/scripts/orchestrate.py) invoking [pipeline/shodan_adapter.py](file:///tmp/C3PO-Shodan-codex/pipeline/shodan_adapter.py)
+- **Mechanism**: Interrogates Shodan's DNS API to fetch subdomains, maps hostnames to IP addresses, performs reverse lookups, and optionally queries certificate transparency logs via `crt.sh`.
+- **Orchestration**: Resolves domain listings and catalogs active hostnames for targeting.
+
+### Phase 3: TXT & Takeover Enrichment
+- **Commands**: [scripts/txtfinder.py](file:///tmp/C3PO-Shodan-codex/scripts/txtfinder.py)
+- **Mechanism**: Inspects TXT records, resolves CNAME paths, and parses provider-linked DNS strings to detect subdomains dangling on third-party service providers (like AWS, Azure, Shopify, GitHub Pages).
+- **Orchestration**: Flags targets with high takeover risk by matching signature fragments.
+
+### Phase 4: Targeted Vulnerability Scanning
+- **Command**: `nuclei`
+- **Mechanism**: Feeds the top 25 reachable, highest-risk web targets into `nuclei`. Scans run using specific templates (tags: `misconfig,exposure,takeover,cve,tech,default-login`) at `critical`, `high`, and `medium` severity.
+- **Orchestration**: Automates active scanning selectively to keep network noise low while validating high-severity risks.
+
+### Phase 5: Visual Evidence Capture
+- **Commands**: [scripts/capture-screenshots.py](file:///tmp/C3PO-Shodan-codex/scripts/capture-screenshots.py) (or the Cloudflare Parallel Scanner script)
+- **Mechanism**: Captures visual proof of reachable HTTP/S hosts. It prioritizes Cloudflare's URL Scanner API for headless capture and falls back to local web engines (Chrome, Edge, Chromium, or `wkhtmltoimage`).
+- **Orchestration**: Creates a screenshot index of reachable interfaces to assist human review.
+
+### Phase 6: Report Synthesis
+- **Commands**: [scripts/render-report.py](file:///tmp/C3PO-Shodan-codex/scripts/render-report.py)
+- **Mechanism**: Aggregates all JSON outputs, Nuclei scan records, CNAME findings, and screenshot paths.
+- **Orchestration**: Generates an interactive, offline-ready HTML dashboard (`output/report.html`) and structured Markdown reports (`runtime/reports/`).
+
+---
+
+### Codex and Agent Integration
+While the pipeline execution is structured and deterministic to guarantee reliability, the workflow is designed to be governed by **Codex Prompts** and **LLM Agents** (like the `C3PO-shodan` agent). 
+1. **Agent Guidance**: The pipeline relies on agent instructions ([AGENTS.md](file:///tmp/C3PO-Shodan-codex/AGENTS.md) and workflow-specific `SKILL.md` files) to orchestrate and patch behavior safely.
+2. **Context Enrichment**: Shell scripts (like [scripts/fetch-context.sh](file:///tmp/C3PO-Shodan-codex/scripts/fetch-context.sh)) keep track of active rules, making the entire workspace navigable and controllable by LLM operators using Codex-style commands.
 
 ## Configuration
 
