@@ -142,9 +142,17 @@ def service_protocol_targets(service_map: Path, targets: set[str], selected: lis
 def run_capture(cmd: list[str], timeout: int) -> tuple[int, str, str]:
     try:
         completed = subprocess.run(cmd, text=True, capture_output=True, timeout=timeout)
-        return completed.returncode, completed.stdout or "", completed.stderr or ""
+        return completed.returncode, coerce_text(completed.stdout), coerce_text(completed.stderr)
     except subprocess.TimeoutExpired as exc:
-        return 124, exc.stdout or "", exc.stderr or f"timeout after {timeout}s"
+        return 124, coerce_text(exc.stdout), coerce_text(exc.stderr) or f"timeout after {timeout}s"
+
+
+def coerce_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return str(value)
 
 
 def redact(argv: list[str], enabled: bool) -> list[str]:

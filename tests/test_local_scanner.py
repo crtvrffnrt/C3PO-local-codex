@@ -1,4 +1,5 @@
 import ipaddress
+import importlib.util
 import json
 import os
 import re
@@ -12,6 +13,10 @@ from pipeline import local_scanner as scanner
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
+NXC_PHASE_SPEC = importlib.util.spec_from_file_location("nxc_phase", Path(__file__).resolve().parents[1] / "tools" / "nxc_phase.py")
+NXC_PHASE = importlib.util.module_from_spec(NXC_PHASE_SPEC)
+assert NXC_PHASE_SPEC and NXC_PHASE_SPEC.loader
+NXC_PHASE_SPEC.loader.exec_module(NXC_PHASE)
 
 
 class LocalScannerTests(unittest.TestCase):
@@ -221,6 +226,7 @@ class LocalScannerTests(unittest.TestCase):
     def test_nxc_dc_inference(self):
         hosts = {
             "10.10.10.10": scanner.Host(ip="10.10.10.10"),
+            "10.10.10.50": scanner.Host(ip="10.10.10.50"),
         }
         hosts["10.10.10.10"].services[389] = scanner.Service(port=389, name="ldap", product="Microsoft Windows Active Directory LDAP")
         hosts["10.10.10.10"].services[445] = scanner.Service(port=445, name="microsoft-ds", product="Windows Server")
@@ -235,7 +241,8 @@ class LocalScannerTests(unittest.TestCase):
             (nxc_out / "json" / "summary.json").write_text(json.dumps({"selected_protocols": ["smb", "ldap"]}), encoding="utf-8")
             candidates = scanner.discover_domain_controllers({"networks": [ipaddress.ip_network("10.10.10.0/24")], "gateways": []}, hosts, Path(tmp), {"scan_batches": []}, False, nxc_outdir=nxc_out)
             self.assertIn("10.10.10.10", candidates)
-            self.assertTrue(any("NXC output references example.internal" in item for item in candidates["10.10.10.10"]["evidence"]))
+            self.assertNotIn("10.10.10.50", candidates)
+            self.assertTrue(any("NXC output references domain example.internal" in item for item in candidates["10.10.10.10"]["evidence"]))
 
     def test_top_hosts_schema(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -265,6 +272,11 @@ class LocalScannerTests(unittest.TestCase):
         self.assertEqual(filtered["validated_networks"], [ipaddress.ip_network("172.16.16.0/24")])
         self.assertEqual(filtered["candidate_networks"], [ipaddress.ip_network("172.16.16.0/24")])
         self.assertEqual(filtered["requested_network"], "172.16.16.0/24")
+        with tempfile.TemporaryDirectory() as tmp:
+            scanner.write_scope(filtered, Path(tmp))
+            scope = json.loads((Path(tmp) / "scope.json").read_text(encoding="utf-8"))
+            self.assertEqual(scope["candidate_networks"], ["172.16.16.0/24"])
+            self.assertEqual(scope["validated_networks"], ["172.16.16.0/24"])
 
     def test_requested_cidr_rejected_when_not_effectively_routed(self):
         ctx = {
@@ -408,6 +420,13 @@ class LocalScannerTests(unittest.TestCase):
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("requires --authorized", result.stderr + result.stdout)
+
+    def test_nxc_run_capture_coerces_timeout_bytes(self):
+        with patch.object(NXC_PHASE.subprocess, "run", side_effect=subprocess.TimeoutExpired(["nxc"], 1, output=b"partial", stderr=b"late")):
+            rc, stdout, stderr = NXC_PHASE.run_capture(["nxc"], 1)
+            self.assertEqual(rc, 124)
+            self.assertEqual(stdout, "partial")
+            self.assertEqual(stderr, "late")
 
     def test_no_active_shodan_or_docker_paths(self):
         allowed = {

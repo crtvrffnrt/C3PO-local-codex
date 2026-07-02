@@ -551,7 +551,7 @@ def write_scope(ctx: dict[str, Any], outdir: Path) -> None:
         "interface": ctx["interface"],
         "requested_network": ctx.get("requested_network", ""),
         "addresses": ctx["addresses"],
-        "candidate_networks": ctx.get("candidate_networks", [str(n) for n in ctx["networks"]]),
+        "candidate_networks": [str(n) for n in ctx.get("candidate_networks", ctx["networks"])],
         "validated_networks": [str(n) for n in ctx["networks"]],
         "active_networks": [str(n) for n in ctx["networks"] if ipv4_active_allowed(n)],
         "gateways": ctx["gateways"],
@@ -1037,20 +1037,24 @@ def discover_domain_controllers(
         nxc_text = "\n\n".join(nxc_text_parts)
         if nxc_text:
             write_text_file(domain_dir / "nxc_evidence.txt", nxc_text + "\n")
+        nxc_lines = nxc_text.splitlines()
         for host in hosts.values():
-            markers = []
-            if host.ip in nxc_text:
-                markers.append(f"NXC output references {host.ip}")
-            if domain_name in nxc_text:
-                markers.append(f"NXC output references {domain_name}")
-            if re.search(r"\bldap\b|\bkerberos\b|\bdomain\b", nxc_text, re.I):
-                markers.append("NXC output references AD-related protocol evidence")
-            if not markers:
+            host_text = "\n".join(line for line in nxc_lines if host.ip in line)
+            if not host_text:
                 continue
+            markers = []
+            markers.append(f"NXC output references {host.ip}")
+            domains = sorted(set(
+                re.findall(r"\bdomain:([A-Za-z0-9_.-]+)", host_text, re.I)
+                + re.findall(r'"domain"\s*:\s*"([^"]+)"', host_text, re.I)
+            ))
+            markers.extend([f"NXC output references domain {domain}" for domain in domains])
+            if re.search(r"\bldap\b|\bkerberos\b|\bdomain\b|[-_.]dc\d*\b", host_text, re.I):
+                markers.append("NXC output references AD-related protocol evidence")
             host.dc_candidate = True
             host.dc_confidence = merge_confidence(host.dc_confidence, "medium")
             if host.ip not in dc_candidates:
-                update_dc_candidate(
+                candidate = update_dc_candidate(
                     dc_candidates,
                     host,
                     confidence="medium",
@@ -1059,6 +1063,8 @@ def discover_domain_controllers(
                     source_artifacts=["nxc/jsonl/events.jsonl", "nxc/jsonl/findings.jsonl", "nxc/reports/markdown-summary.md"],
                     confirmed=False,
                 )
+                candidate["nxc_evidence"].extend(markers)
+                host.dc_evidence.extend(markers)
             else:
                 candidate = dc_candidates[host.ip]
                 candidate["nxc_evidence"].extend(markers)
@@ -1156,7 +1162,7 @@ def codex_select_top_hosts(hosts: dict[str, Host], deterministic: list[Host], ou
     schema.write_text(json.dumps({
         "type": "object",
         "additionalProperties": False,
-        "properties": {"hosts": {"type": "array", "items": {"type": "object", "additionalProperties": False, "properties": {"ip": {"type": "string"}, "rationale": {"type": "string"}}}}},
+        "properties": {"hosts": {"type": "array", "items": {"type": "object", "additionalProperties": False, "properties": {"ip": {"type": "string"}, "rationale": {"type": "string"}}, "required": ["ip", "rationale"]}}},
         "required": ["hosts"],
     }, indent=2), encoding="utf-8")
     prompt = "Return JSON only matching the provided schema.\n" + prompt_path.read_text(encoding="utf-8")
@@ -1482,8 +1488,18 @@ def run_nxc(top_hosts: list[Host], outdir: Path, dry_run: bool) -> dict[str, Any
         "--threads", "4", "--timeout", "8", "--jitter", "0", "--dns-timeout", "5", "--authorized", "--redact-secrets", "--audit-mode", "--resume",
     ]
     info("NXC: running safe protocol recon for observed services")
-    run_command(cmd, outdir, "nxc_phase", timeout=max(300, len(protocols) * len(top_hosts) * 45))
+    record = run_command(cmd, outdir, "nxc_phase", timeout=max(300, len(protocols) * len(top_hosts) * 45))
     summary["ran"] = True
+    summary["exit_code"] = record.get("exit_code")
+    summary["timed_out"] = record.get("timed_out", False)
+    child_summary = nxc_out / "json" / "summary.json"
+    if child_summary.exists():
+        try:
+            summary.update(json.loads(child_summary.read_text(encoding="utf-8")))
+        except json.JSONDecodeError:
+            summary["parse_status"] = "summary_json_invalid"
+    elif record.get("exit_code") not in {0, None}:
+        summary["parse_status"] = "summary_missing"
     return summary
 
 
@@ -1869,7 +1885,7 @@ def main() -> int:
         "context": {
             "interface": ctx["interface"],
             "addresses": ctx["addresses"],
-            "candidate_networks": ctx.get("candidate_networks", []),
+            "candidate_networks": [str(n) for n in ctx.get("candidate_networks", [])],
             "networks": [str(n) for n in ctx["networks"]],
             "validated_networks": [str(n) for n in ctx.get("validated_networks", ctx["networks"])],
             "gateways": ctx["gateways"],
