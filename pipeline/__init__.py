@@ -1,2 +1,1 @@
-"""Pipeline package for C3PO-shodan."""
-
+"""Pipeline package for C3PO Local."""

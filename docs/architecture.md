@@ -2,47 +2,49 @@
 
 ## Overview
 
-C3PO Local Scanner is an interface-scoped internal attack-surface mapper. It replaces the previous external Shodan-oriented collection path with a local Linux network discovery and reporting pipeline.
+C3PO Local is an interface-scoped internal network scanner. It is self-contained and does not depend on external MCP servers, Shodan, Docker PoC targets, public attack-surface workflows, or repository agent/skill files.
 
-## Layers
+## Components
 
-1. `run.sh`
-   Thin root entrypoint that delegates to `bin/run.sh`.
+- `run.sh`: thin root entrypoint.
+- `bin/run.sh`: startup UX, authorization banner, Codex profile selection, and Python scanner invocation.
+- `pipeline/local_scanner.py`: scope derivation, discovery, Nmap/Nuclei orchestration, top-host prioritization, Codex interpretation fallback, artifact writing, and HTML reporting.
+- `tools/nxc_phase.py`: standalone safe NetExec/NXC wrapper with protocol targeting, capability snapshots, safety gates, raw logs, JSONL events/findings, and summary JSON.
+- `scripts/validate.sh`: lightweight local dependency and repository sanity checks.
 
-2. `bin/run.sh`
-   Parses `./run.sh -i <interface>`, performs basic dependency checks, prints startup status, handles Ctrl+C, and invokes the Python scanner core.
+## Runtime Model
 
-3. `pipeline/local_scanner.py`
-   Owns scanner logic:
-   - interface validation
-   - local route and scope discovery
-   - safety filtering
-   - passive and active host discovery
-   - quick nmap scanning
-   - deterministic top-10 prioritization
-   - deep safe scanning of top 10 hosts only
-   - optional safe Nuclei checks
-   - optional screenshots
-   - HTML report generation
+Each run writes to `runs/YYYYmmdd-HHMMSS/`. Raw command output, structured JSON, JSONL command records, and the final HTML report stay together for reproducibility.
 
-## Runtime Outputs
+External commands are wrapped so each phase records command argv, redacted argv, start/end time, duration, exit code, timeout state, stdout path, stderr path, and errors.
 
-Each run writes to `reports/<timestamp>/`:
+## Scope Model
 
-- `report.html`: primary HTML report
-- `scan_data.json`: structured internal evidence
-- `dependencies.json`: dependency and privilege snapshot
-- `nmap_*.xml`: nmap artifacts when nmap is installed
-- `nuclei_safe.jsonl`: Nuclei findings when nuclei is installed and web targets exist
-- `screenshots/*.png`: optional local screenshots
-- `*_command.txt`: reproducibility commands
+The scanner reads local interface and route state with:
 
-## Design Principles
+- `ip -j link show dev <interface>`
+- `ip -j addr show dev <interface>`
+- `ip route show dev <interface>`
+- `ip neigh show dev <interface>`
 
-- Interface-derived scope only
-- No public internet scanning
-- Safe, bounded active discovery
-- Top-10-only deep enumeration
-- Evidence-based reporting without overclaiming
-- Graceful degradation when optional tools are missing
-- Single primary HTML report
+Only private IPv4 scope derived from the selected interface is eligible. Default routes, public ranges, loopback, link-local active sweeps, multicast, broadcast, documentation ranges, overly broad active ranges, and unrelated routes are excluded.
+
+## Scan Stages
+
+1. Tool version capture.
+2. Scope derivation into `scope.json` and `scope.txt`.
+3. Live host discovery into `live-hosts.txt` and `live-hosts.json`.
+4. Fast Nmap against live hosts only with a bounded infrastructure port set.
+5. Top-host scoring and optional Codex interpretation.
+6. Deep Nmap only against selected top hosts.
+7. Nuclei only against top-host HTTP/HTTPS services.
+8. NXC only against protocols indicated by observed services.
+9. Final report generation.
+
+## Prioritization
+
+Risk scoring uses local evidence: gateway/router indicators, `192.168.178.1` FritzBox/router status, DNS/identity/storage/admin/database/web exposure, legacy protocols, service count, and local tool findings. Open ports are treated as exposure, not vulnerability proof.
+
+## NXC Safety
+
+The NXC wrapper defaults to no-auth recon. It refuses active execution without `--authorized`, uses target files and service maps only, does not discover new ranges, rejects credential spraying unless explicitly allowed, and blocks command execution, secret dumping, file transfer, coercion, BloodHound, ADCS abuse, and password changes unless matching dangerous allow flags are supplied.

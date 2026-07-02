@@ -6,6 +6,7 @@
 
 # Output and results
 output/
+runs/
 reports/
 attack_surface_latest.html
 *.json
@@ -37,6 +38,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 .pytest_cache/
+pytest_cache/
 .venv/
 env/
 venv/

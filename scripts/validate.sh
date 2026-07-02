@@ -1,77 +1,34 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/common.sh"
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-TARGET_DOMAIN="${1:-}"
-
-FILES_TO_CHECK=(
-    "$CONFIG_DIR/config.yaml"
-    "$CONFIG_DIR/provider-fragments.txt"
-    "$DOCS_DIR/style.md"
-    "$SCRIPTS_DIR/orchestrate.py"
-    "$PROJECT_ROOT/pipeline/__init__.py"
-    "$PROJECT_ROOT/subtaker.py"
-    "$SCRIPTS_DIR/domain_lookup.py"
-    "$SCRIPTS_DIR/capture-screenshots.py"
-    "$SCRIPTS_DIR/render-report.py"
-)
-
-for file in "${FILES_TO_CHECK[@]}"; do
-    if [ ! -f "$file" ]; then
-        echo "[!] Missing required file: $file" >&2
-        exit 1
-    fi
-done
-
-OPTIONAL_FILES=(
-    "$DOCS_DIR/index-ref.html"
-)
-
-for file in "${OPTIONAL_FILES[@]}"; do
-    if [ ! -f "$file" ]; then
-        echo "[*] Optional reference file missing: $file. Continuing without it." >&2
-    fi
-done
-
-require_command python3
-require_command curl
-
-if config_is_true "$(parse_yaml "chaos_enabled")"; then
-    if ! command -v chaos-client >/dev/null 2>&1; then
-        echo "[*] chaos-client not found. Chaos subdomain discovery will be skipped." >&2
-    fi
-fi
-
-if config_is_true "$(parse_yaml "nmap_enabled")"; then
-    if ! command -v nmap >/dev/null 2>&1; then
-        echo "[*] nmap not found. Local nmap port discovery will be skipped." >&2
-    fi
-fi
-
-if ! resolve_shodan_key >/dev/null 2>&1; then
-    echo "[!] Missing Shodan API key. Set SHODANAPI or ~/.shodan/api_key." >&2
+for file in \
+  "$PROJECT_ROOT/run.sh" \
+  "$PROJECT_ROOT/bin/run.sh" \
+  "$PROJECT_ROOT/pipeline/local_scanner.py" \
+  "$PROJECT_ROOT/tools/nxc_phase.py" \
+  "$PROJECT_ROOT/README.md" \
+  "$PROJECT_ROOT/docs/architecture.md"; do
+  if [ ! -f "$file" ]; then
+    echo "[!] Missing required file: $file" >&2
     exit 1
-fi
+  fi
+done
 
-SCREENSHOT_ENABLED="$(parse_yaml "screenshot_enabled")"
-if config_is_true "$SCREENSHOT_ENABLED"; then
-    if ! find_screenshot_binary >/dev/null 2>&1; then
-        echo "[*] Screenshot capture tools not found. HTML generation will continue without screenshots." >&2
-    fi
-fi
+for cmd in bash python3 ip; do
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    echo "[!] Missing required command: $cmd" >&2
+    exit 1
+  fi
+done
 
-if [ -n "$TARGET_DOMAIN" ]; then
-    IFS=',' read -r -a DOMAIN_LIST <<< "$TARGET_DOMAIN"
-    for domain in "${DOMAIN_LIST[@]}"; do
-        domain="${domain,,}"
-        domain="${domain// /}"
-        if [ -z "$domain" ] || [[ ! "$domain" =~ ^[A-Za-z0-9.-]+$ ]]; then
-            echo "[!] Invalid target domain: $domain" >&2
-            exit 1
-        fi
-    done
-fi
+for cmd in nmap nuclei nxc codex arp arp-scan chromium chromium-browser google-chrome; do
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    echo "[*] Optional command not found: $cmd" >&2
+  fi
+done
+
+python3 -m py_compile "$PROJECT_ROOT/pipeline/local_scanner.py" "$PROJECT_ROOT/tools/nxc_phase.py"
 
 echo "[*] Validation successful."

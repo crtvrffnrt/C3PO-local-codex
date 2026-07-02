@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<nmaprun>
+  <host>
+    <status state="up"/>
+    <address addr="10.10.10.10" addrtype="ipv4"/>
+    <hostnames><hostname name="dc01.example.internal" type="PTR"/></hostnames>
+    <ports>
+      <port protocol="tcp" portid="53"><state state="open"/><service name="domain" product="Microsoft DNS"/></port>
+      <port protocol="tcp" portid="88"><state state="open"/><service name="kerberos-sec" product="Microsoft Kerberos"/></port>
+      <port protocol="tcp" portid="135"><state state="open"/><service name="msrpc"/></port>
+      <port protocol="tcp" portid="389"><state state="open"/><service name="ldap" product="Microsoft Windows Active Directory LDAP"/></port>
+      <port protocol="tcp" portid="445"><state state="open"/><service name="microsoft-ds" product="Windows Server"/></port>
+      <port protocol="tcp" portid="464"><state state="open"/><service name="kpasswd5"/></port>
+      <port protocol="tcp" portid="593"><state state="open"/><service name="http-rpc-epmap"/></port>
+      <port protocol="tcp" portid="636"><state state="open"/><service name="ldapssl" product="Microsoft Windows Active Directory LDAP"/></port>
+      <port protocol="tcp" portid="3268"><state state="open"/><service name="ldap" product="Microsoft Windows Active Directory Global Catalog"/></port>
+      <port protocol="tcp" portid="5985"><state state="open"/><service name="wsman" product="Microsoft HTTPAPI"/></port>
+    </ports>
+  </host>
+</nmaprun>
