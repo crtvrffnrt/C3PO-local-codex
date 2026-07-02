@@ -1536,6 +1536,11 @@ def severity_rank(value: str) -> int:
     return SEVERITY_ORDER.get(str(value).title(), 0)
 
 
+def severity_class(value: Any) -> str:
+    label = str(value or "Info").strip().lower()
+    return "info" if label in {"informational", "info"} else re.sub(r"[^a-z0-9_-]+", "-", label)
+
+
 def finding_matches_host(finding: dict[str, Any], host: Host) -> bool:
     text = " ".join(
         str(finding.get(key, ""))
@@ -1594,12 +1599,12 @@ def render_host_card(host: Host, findings: list[dict[str, Any]], dc_candidates: 
     cves = host_relevant_cves(findings, host)
     severity = host_highest_severity(findings, host)
     findings_html = "".join(
-        f"<li><strong>{esc(item.get('severity', 'Info'))}</strong> {esc(item.get('title', 'Finding'))} <span class='muted'>({esc(item.get('status', 'unknown'))})</span></li>"
+        f"<li><span class='badge severity-{severity_class(item.get('severity', 'Info'))}'>{esc(item.get('severity', 'Info'))}</span> {esc(item.get('title', 'Finding'))} <span class='muted'>({esc(item.get('status', 'unknown'))})</span></li>"
         for item in host_findings(findings, host)[:4]
     ) or "<li class='muted'>No host-specific findings recorded.</li>"
     commands = host_verification_commands(host, dc_candidates)
     command_html = "".join(
-        f"<li><code>{esc(cmd['command'])}</code><div class='muted'>{esc(cmd['label'])} · timeout {esc(cmd['timeout'])}</div></li>"
+        f"<li><code>{esc(cmd['command'])}</code><div class='muted'>{esc(cmd['label'])} - timeout {esc(cmd['timeout'])}</div></li>"
         for cmd in commands
     )
     screenshot_html = f"<img src='{esc(host.screenshot_path)}' alt='Screenshot for {esc(host.ip)}'>" if host.screenshot_path else "<div class='muted'>No screenshot available.</div>"
@@ -1609,10 +1614,10 @@ def render_host_card(host: Host, findings: list[dict[str, Any]], dc_candidates: 
   <div class="host-head">
     <div>
       <div class="host-title">{esc(host.hostname or host.ip)}</div>
-      <div class="muted">{esc(host.ip)} · score {esc(host.score)} · {esc(host.role_guess or 'unknown')}</div>
+      <div class="muted mono">{esc(host.ip)} - score {esc(host.score)} - {esc(host.role_guess or 'unknown')}</div>
     </div>
     <div class="badges">
-      <span class="badge severity-{severity.lower()}">{esc(severity)}</span>
+      <span class="badge severity-{severity_class(severity)}">{esc(severity)}</span>
       <span class="badge">{esc(len(host.services))} open ports</span>
       {dc_badge}
     </div>
@@ -1656,11 +1661,11 @@ def render_report(outdir: Path, ctx: dict[str, Any], hosts: dict[str, Host], top
     prioritized_findings = sorted(findings, key=lambda item: (-severity_rank(item.get("severity", "")), str(item.get("host", ""))))[:5]
     validated_network_pills = "".join(f"<span class='pill'>{esc(net)}</span>" for net in validated_networks) or "<span class='muted'>none</span>"
     management_bullets = "".join(
-        f"<li><strong>{esc(item.get('severity', 'Info'))}</strong> {esc(item.get('title', 'Finding'))} on {esc(item.get('host', 'n/a'))}: {esc(item.get('evidence', ''))}</li>"
+        f"<li><span class='badge severity-{severity_class(item.get('severity', 'Info'))}'>{esc(item.get('severity', 'Info'))}</span> {esc(item.get('title', 'Finding'))} on <span class='mono'>{esc(item.get('host', 'n/a'))}</span>: {esc(item.get('evidence', ''))}</li>"
         for item in prioritized_findings
     ) or "<li class='muted'>No high-priority findings were produced.</li>"
     finding_rows = "".join(
-        f"<tr><td>{esc(item.get('severity'))}</td><td>{esc(item.get('status'))}</td><td>{esc(item.get('host'))}</td><td>{esc(item.get('title'))}</td><td>{esc(item.get('evidence'))}</td><td>{esc(item.get('recommendation'))}</td></tr>"
+        f"<tr class='finding-row' data-severity='{severity_class(item.get('severity'))}' data-search='{esc(' '.join(str(item.get(key, '')) for key in ['severity', 'status', 'host', 'title', 'evidence', 'recommendation']))}'><td><span class='badge severity-{severity_class(item.get('severity'))}'>{esc(item.get('severity'))}</span></td><td>{esc(item.get('status'))}</td><td class='mono'>{esc(item.get('host'))}</td><td>{esc(item.get('title'))}</td><td><details><summary>Evidence</summary><pre>{esc(item.get('evidence'))}</pre></details></td><td>{esc(item.get('recommendation'))}</td></tr>"
         for item in findings
     )
     route_warning_html = "".join(
@@ -1694,20 +1699,67 @@ def render_report(outdir: Path, ctx: dict[str, Any], hosts: dict[str, Host], top
     )
     host_cards = "".join(render_host_card(host, findings, dc_candidates) for host in top_hosts)
     report.write_text(f"""<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#FAFAFA">
 <title>C3PO Local Scanner Report</title>
+<script>
+  (function(){{
+    var s = localStorage.getItem('theme');
+    if (!s) s = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+    document.documentElement.dataset.theme = s;
+    document.documentElement.style.colorScheme = s;
+    var meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', s === 'dark' ? '#0A0A0A' : '#FAFAFA');
+  }})();
+</script>
 <style>
-body{{margin:0;background:linear-gradient(180deg,#f3f6fb,#eef2f7);color:#17202a;font:14px/1.5 Inter,system-ui,sans-serif}}header{{background:linear-gradient(135deg,#0f172a,#1d4ed8);color:#fff;padding:32px 34px}}main{{max-width:1460px;margin:auto;padding:22px}}section{{background:#fff;border:1px solid #d9e0ea;border-radius:14px;padding:18px;margin:0 0 16px;box-shadow:0 10px 30px rgba(15,23,42,.05)}}table{{width:100%;border-collapse:collapse}}th,td{{border-bottom:1px solid #e1e7ef;padding:8px;text-align:left;vertical-align:top}}th{{background:#eef3f8}}code{{display:block;white-space:pre-wrap;background:#0f172a;color:#e5e7eb;padding:7px;border-radius:8px;overflow:auto}}.cards{{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}}.card{{border:1px solid #d9e0ea;border-radius:12px;padding:12px;background:#fbfdff}}.card strong{{display:block;font-size:24px}}.muted{{color:#64748b}}.summary-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}}.summary-tile{{border:1px solid #d9e0ea;border-radius:12px;padding:14px;background:#fff}}.summary-tile strong{{display:block;font-size:22px}}.host-grid{{display:grid;grid-template-columns:1.2fr .8fr 1fr 1fr;gap:12px}}.host-card{{border:1px solid #d9e0ea;border-radius:16px;padding:16px;background:linear-gradient(180deg,#fff,#f8fbff)}}.host-head{{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;margin-bottom:12px}}.host-title{{font-size:20px;font-weight:700}}.badges{{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end}}.badge{{display:inline-block;padding:4px 8px;border-radius:999px;background:#eef2ff;color:#1e3a8a;font-size:12px;font-weight:700}}.badge.dc{{background:#ecfeff;color:#155e75}}.badge.severity-critical{{background:#7f1d1d;color:#fff}}.badge.severity-high{{background:#b91c1c;color:#fff}}.badge.severity-medium{{background:#f59e0b;color:#111827}}.badge.severity-low{{background:#d1fae5;color:#065f46}}.badge.severity-informational{{background:#e2e8f0;color:#334155}}.shot img{{width:100%;border-radius:12px;border:1px solid #d9e0ea;background:#f8fafc;aspect-ratio:16/10;object-fit:cover}}.meta,.findings,.commands{{padding:4px 2px}}.findings ul,.commands ul{{margin:8px 0 0 18px;padding:0}}.findings li,.commands li{{margin:0 0 8px}}pre{{margin:0;white-space:pre-wrap}}.pill{{display:inline-block;padding:4px 8px;border-radius:999px;background:#e2e8f0;margin:0 6px 6px 0}}.section-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px}}.kpi{{font-size:28px;font-weight:800}}.panel{{background:#fff;border:1px solid #e1e7ef;border-radius:12px;padding:12px}}.note{{background:#f8fafc;border-left:4px solid #3b82f6;padding:10px 12px;border-radius:8px}}.stack{{display:grid;gap:12px}}
-</style></head><body><header><h1>C3PO Local Scanner Report</h1><p>Authorized internal scan via {esc(ctx['interface'])} - run {esc(outdir.name)}</p></header><main>
-<section><h2>Management Summary</h2><div class="summary-grid"><div class="summary-tile"><span class="muted">Critical</span><strong>{severity_counts['Critical']}</strong></div><div class="summary-tile"><span class="muted">High</span><strong>{severity_counts['High']}</strong></div><div class="summary-tile"><span class="muted">Medium</span><strong>{severity_counts['Medium']}</strong></div><div class="summary-tile"><span class="muted">Domain controllers in top 10</span><strong>{'yes' if both_dc_in_top else 'no'}</strong></div><div class="summary-tile"><span class="muted">Route warnings</span><strong>{len(overlap_warnings)}</strong></div><div class="summary-tile"><span class="muted">Runtime</span><strong>{total_runtime}s</strong></div></div><div class="note" style="margin-top:12px"><strong>Priority findings</strong><ul>{management_bullets}</ul></div></section>
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap');
+:root {{color-scheme: light;--font-sans:"IBM Plex Sans",system-ui,sans-serif;--font-header:"Space Grotesk",system-ui,sans-serif;--font-mono:"JetBrains Mono",monospace;--bg:#FAFAFA;--bg-subtle:#F5F5F5;--ui:#F0F0F0;--ui-hover:#E8E8E8;--line:#EAEAEA;--border:#E0E0E0;--border-hover:#D0D0D0;--ink:#000000;--text:#171717;--surface:#FFFFFF;--muted:#6E6E6E;--accent:#000000;--on-accent:#FFFFFF;--focus-ring:#000000;--sev-crit-bg:#FCE4E4;--sev-crit-bd:#F5C6C7;--sev-crit-fg:#B91212;--sev-high-bg:#FCEEE3;--sev-high-bd:#F6DEC8;--sev-high-fg:#C2410C;--sev-med-bg:#FBF3DD;--sev-med-bd:#F0E4BE;--sev-med-fg:#B07A06;--sev-low-bg:#E6F6EE;--sev-low-bd:#CDEBDA;--sev-low-fg:#0E9E57;--header-bg:rgba(255,255,255,.82);--glass-bg:rgba(255,255,255,.55);--glass-border:rgba(0,0,0,.1);--row-hover:#FAFAFA}}
+html[data-theme="dark"] {{color-scheme: dark;--bg:#0A0A0A;--bg-subtle:#111111;--ui:#1A1A1A;--ui-hover:#222222;--line:rgba(255,255,255,.1);--border:rgba(255,255,255,.14);--border-hover:rgba(255,255,255,.22);--ink:#EDEDED;--text:#EDEDED;--surface:#161616;--muted:#A1A1A1;--accent:#EDEDED;--on-accent:#0A0A0A;--focus-ring:#EDEDED;--sev-crit-bg:rgba(229,72,77,.15);--sev-crit-bd:rgba(229,72,77,.25);--sev-crit-fg:#FF6369;--sev-high-bg:rgba(255,128,31,.12);--sev-high-bd:rgba(255,128,31,.22);--sev-high-fg:#FF8B3E;--sev-med-bg:rgba(255,178,36,.12);--sev-med-bd:rgba(255,178,36,.22);--sev-med-fg:#FFB224;--sev-low-bg:rgba(70,167,88,.12);--sev-low-bd:rgba(70,167,88,.22);--sev-low-fg:#46A758;--header-bg:rgba(10,10,10,.82);--glass-bg:rgba(255,255,255,.05);--glass-border:rgba(255,255,255,.12);--row-hover:rgba(255,255,255,.035)}}
+*{{box-sizing:border-box}}html{{scroll-behavior:smooth}}body{{margin:0;background:radial-gradient(circle at 20% -10%,var(--ui),transparent 34rem),linear-gradient(180deg,var(--bg),var(--bg-subtle));color:var(--text);font:14px/1.6 var(--font-sans)}}header{{position:sticky;top:0;z-index:10;background:var(--header-bg);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}}.header-inner,main{{max-width:1000px;margin:0 auto;padding:2rem 1.5rem}}.header-inner{{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding-top:1rem;padding-bottom:1rem}}h1,h2,h3,.host-title,.summary-tile strong,.button{{font-family:var(--font-header)}}h1{{margin:0;font-size:clamp(1.6rem,4vw,2.7rem);letter-spacing:-.04em;color:var(--ink)}}h2{{margin:0 0 1rem;font-size:1.35rem;letter-spacing:-.025em}}h3{{margin:1.4rem 0 .7rem;font-size:1rem}}p{{margin:.4rem 0 0}}main{{display:grid;gap:1rem}}section,.host-card,.panel,.summary-tile{{background:var(--surface);border:1px solid var(--border);border-radius:8px}}section{{padding:1.25rem;box-shadow:0 18px 50px rgba(0,0,0,.04)}}.summary-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem}}.summary-tile{{padding:1.25rem;transition:border-color .2s ease-in-out;cursor:pointer;text-align:left;color:var(--text)}}.summary-tile:hover,.summary-tile.active{{border-color:var(--border-hover)}}.summary-tile strong{{display:block;font-size:2rem;line-height:1.1;margin-top:.35rem}}.summary-tile.static{{cursor:default}}.muted{{color:var(--muted)}}.mono,code,pre{{font-family:var(--font-mono)}}.button,.theme-toggle,.search-box button{{background:var(--accent);color:var(--on-accent);border:none;border-radius:6px;padding:.5rem 1.2rem;font-family:var(--font-header);font-weight:600;cursor:pointer;transition:opacity .2s}}.button:hover,.theme-toggle:hover,.search-box button:hover{{opacity:.78}}.search-box{{display:flex;align-items:center;border:1px solid var(--border);border-radius:8px;background:var(--surface);padding:.25rem .25rem .25rem 1rem;margin-bottom:1rem}}.search-box input{{border:none;outline:none;background:transparent;color:var(--text);font-family:var(--font-sans);width:100%;min-width:0}}table{{width:100%;border-collapse:collapse}}th,td{{border-bottom:1px solid var(--line);padding:1rem .75rem;text-align:left;vertical-align:top}}th{{font-family:var(--font-header);font-weight:600;color:var(--muted);font-size:.78rem;text-transform:uppercase;letter-spacing:.06em}}tr:hover{{background-color:var(--row-hover)}}code{{display:block;white-space:pre-wrap;background:var(--bg-subtle);border:1px solid var(--line);border-radius:6px;padding:.65rem;overflow-x:auto;color:var(--text);font-size:13.5px}}pre{{margin:0;white-space:pre-wrap;background:var(--bg-subtle);border:1px solid var(--line);border-radius:6px;padding:1rem;overflow-x:auto;color:var(--text);font-size:13.5px}}details summary{{cursor:pointer;font-family:var(--font-header);font-weight:600;color:var(--ink)}}details pre{{margin-top:.65rem}}.badge{{display:inline-flex;align-items:center;justify-content:center;padding:2px 8px;border-radius:4px;font-family:var(--font-sans);font-size:12px;font-weight:600;text-transform:uppercase;background:var(--ui);border:1px solid var(--border);color:var(--text)}}.severity-critical{{background:var(--sev-crit-bg);border-color:var(--sev-crit-bd);color:var(--sev-crit-fg)}}.severity-high{{background:var(--sev-high-bg);border-color:var(--sev-high-bd);color:var(--sev-high-fg)}}.severity-medium{{background:var(--sev-med-bg);border-color:var(--sev-med-bd);color:var(--sev-med-fg)}}.severity-low{{background:var(--sev-low-bg);border-color:var(--sev-low-bd);color:var(--sev-low-fg)}}.severity-info{{background:var(--ui);border-color:var(--border);color:var(--muted)}}.dc{{background:var(--glass-bg);border-color:var(--glass-border)}}.pill{{display:inline-flex;padding:4px 8px;border-radius:999px;background:var(--ui);border:1px solid var(--border);margin:0 6px 6px 0;font-family:var(--font-mono);font-size:12px}}.section-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem}}.panel{{padding:1rem;background:var(--glass-bg);border-color:var(--glass-border)}}.note{{background:var(--glass-bg);border:1px solid var(--glass-border);border-radius:8px;padding:1rem}}.stack{{display:grid;gap:1rem}}.host-card{{padding:1.25rem;transition:border-color .2s ease-in-out}}.host-card:hover{{border-color:var(--border-hover)}}.host-head{{display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;margin-bottom:1rem}}.host-title{{font-size:1.25rem;font-weight:700;letter-spacing:-.025em}}.badges{{display:flex;gap:.5rem;flex-wrap:wrap;justify-content:flex-end}}.host-grid{{display:grid;grid-template-columns:1.1fr .9fr 1fr 1fr;gap:1rem}}.shot img{{width:100%;border-radius:8px;border:1px solid var(--border);background:var(--bg-subtle);aspect-ratio:16/10;object-fit:cover}}.findings ul,.commands ul{{margin:.6rem 0 0 1rem;padding:0}}.findings li,.commands li{{margin:0 0 .6rem}}.table-wrap{{overflow-x:auto}}@media (max-width:820px){{.header-inner{{align-items:flex-start;flex-direction:column}}.host-grid{{grid-template-columns:1fr}}th,td{{padding:.8rem .55rem}}}}
+</style></head><body><header><div class="header-inner"><div><h1>C3PO Local Scanner Report</h1><p class="muted">Authorized internal scan via <span class="mono">{esc(ctx['interface'])}</span> - run <span class="mono">{esc(outdir.name)}</span></p></div><button class="theme-toggle" id="themeToggle" type="button">Toggle theme</button></div></header><main>
+<section><h2>Management Summary</h2><div class="summary-grid"><button class="summary-tile" type="button" data-filter="critical"><span class="muted">Critical</span><strong>{severity_counts['Critical']}</strong></button><button class="summary-tile" type="button" data-filter="high"><span class="muted">High</span><strong>{severity_counts['High']}</strong></button><button class="summary-tile" type="button" data-filter="medium"><span class="muted">Medium</span><strong>{severity_counts['Medium']}</strong></button><button class="summary-tile" type="button" data-filter="low"><span class="muted">Low</span><strong>{severity_counts['Low']}</strong></button><div class="summary-tile static"><span class="muted">Domain controllers in top 10</span><strong>{'yes' if both_dc_in_top else 'no'}</strong></div><div class="summary-tile static"><span class="muted">Route warnings</span><strong>{len(overlap_warnings)}</strong></div><div class="summary-tile static"><span class="muted">Runtime</span><strong>{total_runtime}s</strong></div></div><div class="note" style="margin-top:1rem"><strong>Priority findings</strong><ul>{management_bullets}</ul></div></section>
 <section><h2>Routing and Scope</h2><div class="section-grid"><div class="panel"><strong>Selected interface</strong><div>{esc(ctx['interface'])}</div><div class="muted">Codex profile: {esc(profile)}</div></div><div class="panel"><strong>Validated tun0 networks</strong><div>{validated_network_pills}</div></div><div class="panel"><strong>Excluded routes</strong><pre>{esc('; '.join(ctx.get('route_excluded_networks', [])) or 'none')}</pre></div><div class="panel"><strong>Overlap warnings</strong><pre>{esc('; '.join(item.get('network', '') + ' -> ' + (item.get('effective_dev') or 'unknown') for item in overlap_warnings) or 'none')}</pre></div></div><h3>Route validation evidence</h3><table><tr><th>Network</th><th>Representative IP</th><th>Effective dev</th><th>Route output</th></tr>{route_sample_html}</table><h3>Overlap details</h3><table><tr><th>Network</th><th>Effective dev</th><th>Via</th><th>Competing devs</th></tr>{route_warning_html}</table><h3>Domain Controller Candidates</h3><table><tr><th>IP</th><th>Hostname</th><th>Confidence</th><th>Confirmed</th><th>Reason</th><th>Ports</th><th>Evidence</th></tr>{dc_rows}</table><p class="muted">Detected DNS domain: example.internal. Both DCs included in top 10: { 'yes' if both_dc_in_top else 'no' }.</p></section>
 <section><h2>Tool Versions</h2><pre>{esc(json.dumps(deps, indent=2))}</pre></section>
 <section><h2>Top 10 Host Cards</h2><div class="stack">{host_cards or '<div class="muted">No top hosts available.</div>'}</div></section>
-<section><h2>Findings</h2><table><tr><th>Severity</th><th>Status</th><th>Host</th><th>Finding</th><th>Evidence</th><th>Recommendation</th></tr>{finding_rows or '<tr><td colspan="6" class="muted">No findings generated.</td></tr>'}</table></section>
+<section><h2>Findings</h2><form class="search-box" id="findingSearch"><input id="findingQuery" type="search" placeholder="Search findings by host, service, evidence, or recommendation" autocomplete="off"><button type="submit">Search</button></form><div class="table-wrap"><table><thead><tr><th>Severity</th><th>Status</th><th>Host</th><th>Finding</th><th>Evidence</th><th>Recommendation</th></tr></thead><tbody id="findingsBody">{finding_rows or '<tr><td colspan="6" class="muted">No findings generated.</td></tr>'}</tbody></table></div></section>
 <section><h2>Verification Commands, Timeouts, and Partial Results</h2><div class="note">Commands in this section are limited to the top 10 hosts and are intended to confirm the findings already shown above.</div><h3>Verification commands</h3><table><tr><th>Host</th><th>Hostname</th><th>Purpose</th><th>Timeout</th><th>Command</th></tr>{verification_html}</table><h3>Timeouts and partial results</h3><table><tr><th>Command</th><th>Exit</th><th>Timeout</th><th>Duration</th><th>Status</th></tr>{timeout_rows}</table></section>
 <section><h2>Performance</h2><table><tr><th>Phase</th><th>Duration</th><th>Timeouts</th><th>Commands</th></tr>{phase_rows or '<tr><td colspan="4" class="muted">No phase timing data recorded.</td></tr>'}</table><h3>Scan batches</h3><table><tr><th>Phase</th><th>Network</th><th>Hosts</th><th>Duration</th><th>Timeout</th><th>Timed out</th></tr>{batch_rows}</table></section>
 <section><h2>Nmap, Nuclei, and NXC Summary</h2><p>Nmap artifacts, Nuclei JSONL, and NXC structured outputs are stored beside this report. NXC selected protocols: {esc(', '.join(nxc_summary.get('selected_protocols', [])) or 'none')}. Screenshots: {esc('yes' if performance_summary.get('screenshots') else 'no')}.</p></section>
 <section><h2>Assumptions and Limitations</h2><p>Results depend on local privileges, host firewall behavior, Wi-Fi client isolation, optional tool availability, and scan timing. The scanner does not run brute force, credential dumping, exploit modules, coercion, password changes, or state-changing tests.</p></section>
+<script>
+(function(){{
+  var activeSeverity = '';
+  var rows = Array.prototype.slice.call(document.querySelectorAll('.finding-row'));
+  var input = document.getElementById('findingQuery');
+  var form = document.getElementById('findingSearch');
+  var meta = document.querySelector('meta[name="theme-color"]');
+  function applyFilters(){{
+    var query = (input && input.value ? input.value : '').trim().toLowerCase();
+    rows.forEach(function(row){{
+      var matchesText = !query || (row.dataset.search || row.textContent).toLowerCase().indexOf(query) !== -1;
+      var matchesSeverity = !activeSeverity || row.dataset.severity === activeSeverity;
+      row.style.display = matchesText && matchesSeverity ? '' : 'none';
+    }});
+  }}
+  if (input) input.addEventListener('keyup', applyFilters);
+  if (form) form.addEventListener('submit', function(event){{ event.preventDefault(); applyFilters(); }});
+  document.querySelectorAll('[data-filter]').forEach(function(card){{
+    card.addEventListener('click', function(){{
+      activeSeverity = activeSeverity === card.dataset.filter ? '' : card.dataset.filter;
+      document.querySelectorAll('[data-filter]').forEach(function(item){{ item.classList.toggle('active', item === card && activeSeverity); }});
+      applyFilters();
+    }});
+  }});
+  var themeToggle = document.getElementById('themeToggle');
+  if (themeToggle) themeToggle.addEventListener('click', function(){{
+    var nextTheme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = nextTheme;
+    document.documentElement.style.colorScheme = nextTheme;
+    localStorage.setItem('theme', nextTheme);
+    if (meta) meta.setAttribute('content', nextTheme === 'dark' ? '#0A0A0A' : '#FAFAFA');
+  }});
+}})();
+</script>
 </main></body></html>""", encoding="utf-8")
     return report
 
