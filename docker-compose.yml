@@ -1,0 +1,11 @@
+services:
+  c3po-local:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    network_mode: host
+    pid: host
+    privileged: true
+    volumes:
+      - ./:/app
+    entrypoint: ["/app/run.sh"]

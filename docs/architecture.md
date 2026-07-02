@@ -1,38 +1,48 @@
-# C3PO-shodan Architecture
+# C3PO Local Scanner Architecture
 
 ## Overview
 
-C3PO-shodan follows the same root-centric orchestration model as `C3PO-Osinter`, but swaps prompt-driven intelligence stages for a deterministic Shodan collection and rendering pipeline.
+C3PO Local Scanner is an interface-scoped internal attack-surface mapper. It replaces the previous external Shodan-oriented collection path with a local Linux network discovery and reporting pipeline.
 
 ## Layers
 
-1. `run.sh` and `bin/run.sh`
-   Coordinate validation, collection, screenshots, and rendering.
-   Their behavior is guided by `AGENTS.md` and `SKILL.md` files at the repo root and per workflow phase.
+1. `run.sh`
+   Thin root entrypoint that delegates to `bin/run.sh`.
 
-2. `scripts/common.sh`
-   Centralizes path resolution, dotenv loading, config parsing, and helper functions.
+2. `bin/run.sh`
+   Parses `./run.sh -i <interface>`, performs basic dependency checks, prints startup status, handles Ctrl+C, and invokes the Python scanner core.
 
-3. `scripts/collect-attack-surface.py`
-   Performs Shodan DNS collection, hostname/IP enrichment, TXT/provider analysis, and host risk scoring.
-
-4. `scripts/capture-screenshots.py`
-   Attempts visual capture of reachable web hosts using whatever headless browser tooling is available locally.
-
-5. `scripts/render-report.py`
-   Builds both markdown and a self-contained HTML dashboard from the collected JSON plus screenshot artifacts.
+3. `pipeline/local_scanner.py`
+   Owns scanner logic:
+   - interface validation
+   - local route and scope discovery
+   - safety filtering
+   - passive and active host discovery
+   - quick nmap scanning
+   - deterministic top-10 prioritization
+   - deep safe scanning of top 10 hosts only
+   - optional safe Nuclei checks
+   - optional screenshots
+   - HTML report generation
 
 ## Runtime Outputs
 
-- `output/*.json`: Raw collection and screenshot manifests
-- `output/*.html`: Self-contained HTML dashboards
-- `runtime/reports/*.md`: Markdown attack-surface reports
-- `runtime/screenshots/*.png`: Optional host screenshots
+Each run writes to `reports/<timestamp>/`:
+
+- `report.html`: primary HTML report
+- `scan_data.json`: structured internal evidence
+- `dependencies.json`: dependency and privilege snapshot
+- `nmap_*.xml`: nmap artifacts when nmap is installed
+- `nuclei_safe.jsonl`: Nuclei findings when nuclei is installed and web targets exist
+- `screenshots/*.png`: optional local screenshots
+- `*_command.txt`: reproducibility commands
 
 ## Design Principles
 
-- Deterministic and inspectable
-- Single-command execution
-- No hard dependency on Codex
-- Best-effort screenshots
-- Local-only artifact generation
+- Interface-derived scope only
+- No public internet scanning
+- Safe, bounded active discovery
+- Top-10-only deep enumeration
+- Evidence-based reporting without overclaiming
+- Graceful degradation when optional tools are missing
+- Single primary HTML report

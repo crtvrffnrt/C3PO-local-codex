@@ -6,6 +6,7 @@
 
 # Output and results
 output/
+reports/
 attack_surface_latest.html
 *.json
 *.jsonl

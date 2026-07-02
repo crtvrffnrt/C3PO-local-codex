@@ -590,57 +590,67 @@ def html_report(payload: dict, manifest: dict, nuclei_results: list[dict]) -> st
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Manrope:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
   <style>
     :root {{
-      color-scheme: light;
-      --bg: #f3f5f7;
-      --paper: #ffffff;
-      --paper-alt: #fafbfc;
-      --text: #101214;
-      --text-soft: #2a2f35;
-      --text-muted: #66707a;
-      --line: #dbe1e7;
-      --line-strong: #c9d1d9;
-      --shadow: 0 18px 50px rgba(16, 18, 20, 0.08);
-      --radius-lg: 26px;
+      color-scheme: dark;
+      --bg: #050816;
+      --bg-2: #070d1f;
+      --surface: rgba(10, 15, 33, 0.88);
+      --surface-2: rgba(14, 20, 41, 0.94);
+      --surface-3: rgba(255, 255, 255, 0.03);
+      --text: #f5f7fb;
+      --text-soft: #c7d1e0;
+      --text-muted: #7f8aa0;
+      --line: rgba(255, 255, 255, 0.09);
+      --line-strong: rgba(76, 246, 255, 0.24);
+      --shadow: 0 24px 70px rgba(0, 0, 0, 0.42);
+      --radius-lg: 28px;
       --radius-md: 18px;
       --radius-sm: 12px;
-      --risk-red-text: #b42318;
-      --risk-red-line: #f0c6c2;
-      --risk-red-bg: #fdf1f0;
-      --risk-orange-text: #9a6700;
-      --risk-orange-line: #f0ddb2;
-      --risk-orange-bg: #fff7eb;
+      --cyan: #4cf6ff;
+      --magenta: #ff4ff8;
+      --green: #5cff8d;
+      --amber: #e8d66c;
+      --risk-red-text: #ff6b7a;
+      --risk-red-line: rgba(255, 107, 122, 0.28);
+      --risk-red-bg: rgba(255, 107, 122, 0.12);
+      --risk-orange-text: #f4c15f;
+      --risk-orange-line: rgba(244, 193, 95, 0.24);
+      --risk-orange-bg: rgba(244, 193, 95, 0.12);
     }}
     * {{ box-sizing: border-box; }}
     html {{ scroll-behavior: smooth; }}
     body {{
       margin: 0;
       min-height: 100vh;
-      background: linear-gradient(180deg, #f8fafc 0%, #eef2f6 100%);
+      background:
+        radial-gradient(circle at top left, rgba(255, 79, 248, 0.14), transparent 32%),
+        radial-gradient(circle at top right, rgba(76, 246, 255, 0.12), transparent 28%),
+        linear-gradient(180deg, #050816 0%, #070b18 50%, #050816 100%);
       color: var(--text);
       font: 400 15px/1.65 "Manrope", sans-serif;
     }}
     a {{ color: inherit; }}
     .viewer-shell {{
-      width: min(1460px, calc(100% - 28px));
+      width: min(1520px, calc(100% - 28px));
       margin: 0 auto;
       padding: 28px 0 52px;
       display: grid;
-      grid-template-columns: 320px minmax(0, 1fr);
+      grid-template-columns: 340px minmax(0, 1fr);
       gap: 28px;
     }}
     .sidebar {{
       position: sticky;
-      top: 20px;
+      top: 18px;
       align-self: start;
       display: flex;
       flex-direction: column;
       gap: 18px;
     }}
     .panel {{
-      background: rgba(255, 255, 255, 0.92);
-      border: 1px solid rgba(16, 18, 20, 0.08);
+      background: var(--surface);
+      border: 1px solid var(--line);
       border-radius: var(--radius-lg);
-      box-shadow: 0 14px 28px rgba(16, 18, 20, 0.05);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(18px);
       padding: 22px 22px 20px;
     }}
     .eyebrow, .meta-label, .terminal-title, .badge, .pill, .toc a, .footer-meta, .section-label, .host-subline {{
@@ -648,12 +658,12 @@ def html_report(payload: dict, manifest: dict, nuclei_results: list[dict]) -> st
       letter-spacing: 0.03em;
       text-transform: uppercase;
     }}
-    .eyebrow {{ margin: 0 0 12px; font-size: 0.7rem; color: var(--text-muted); }}
+    .eyebrow {{ margin: 0 0 12px; font-size: 0.7rem; color: var(--cyan); }}
     .sidebar h1, .paper h1, .paper h2, .paper h3 {{
       font-family: "Space Grotesk", sans-serif;
       line-height: 1.08;
       letter-spacing: -0.03em;
-      color: #060606;
+      color: var(--text);
     }}
     .sidebar h1 {{ margin: 0 0 14px; font-size: 1.5rem; }}
     .sidebar p {{ margin: 0; color: var(--text-soft); font-size: 0.9rem; }}
@@ -689,25 +699,61 @@ def html_report(payload: dict, manifest: dict, nuclei_results: list[dict]) -> st
       border: 1px solid transparent;
       transition: all 140ms ease;
     }}
-    .toc a:hover {{ background: #fafbfc; border-color: var(--line); transform: translateX(2px); }}
+    .toc a:hover {{ background: rgba(255,255,255,0.04); border-color: var(--line-strong); transform: translateX(2px); }}
     .paper-wrap {{ min-width: 0; }}
     .paper {{
-      background: var(--paper);
+      background: linear-gradient(180deg, rgba(13, 18, 35, 0.96) 0%, rgba(7, 11, 24, 0.98) 100%);
       border: 1px solid var(--line);
       border-radius: 34px;
       box-shadow: var(--shadow);
       overflow: hidden;
     }}
     .paper-inner {{ padding: 44px 52px 54px; }}
-    .cover {{ padding-bottom: 26px; border-bottom: 1px solid var(--line); }}
-    .cover-kicker {{ margin: 0 0 14px; font: 600 0.72rem/1 "IBM Plex Mono", monospace; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); }}
+    .cover {{
+      padding-bottom: 28px;
+      border-bottom: 1px solid var(--line);
+      position: relative;
+      overflow: hidden;
+    }}
+    .cover::before {{
+      content: "";
+      position: absolute;
+      inset: auto -8% -38% auto;
+      width: 360px;
+      height: 360px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(76, 246, 255, 0.11), transparent 68%);
+      pointer-events: none;
+    }}
+    .cover-kicker {{ margin: 0 0 14px; font: 600 0.72rem/1 "IBM Plex Mono", monospace; text-transform: uppercase; letter-spacing: 0.06em; color: var(--magenta); }}
     .paper h1 {{ margin: 0 0 16px; font-size: clamp(1.8rem, 4vw, 2.8rem); }}
     .lede {{ margin: 0; max-width: 860px; font-size: 1.05rem; color: var(--text-soft); }}
+    .hero-meta {{
+      margin-top: 18px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+    }}
+    .hero-pill {{
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,0.03);
+      color: var(--text-soft);
+      font: 600 0.72rem/1 "IBM Plex Mono", monospace;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }}
+    .hero-pill strong {{ color: var(--text); }}
     .metric-grid {{ margin-top: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }}
     .metric-card {{
       border: 1px solid var(--line);
       border-radius: 14px;
-      background: #fcfdfe;
+      background: var(--surface-3);
       padding: 12px 14px;
       display: flex;
       flex-direction: column;
@@ -754,10 +800,33 @@ def html_report(payload: dict, manifest: dict, nuclei_results: list[dict]) -> st
     .paper p, .paper li {{ color: var(--text-soft); }}
     .paper p {{ margin: 0 0 14px; }}
     .grid-two {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }}
+    .section-template {{
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 16px;
+      margin-bottom: 16px;
+    }}
+    .template-card {{
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.02));
+      padding: 18px;
+    }}
+    .template-card h3 {{ margin-top: 0; }}
+    .template-card .template-stat {{
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--line);
+      color: var(--text-soft);
+    }}
+    .template-card .template-stat:last-child {{ border-bottom: 0; padding-bottom: 0; }}
+    .template-card .template-stat strong {{ color: var(--text); font-family: "IBM Plex Mono", monospace; font-size: 0.82rem; }}
     .callout {{
       border: 1px solid var(--line);
       border-radius: 16px;
-      background: linear-gradient(180deg, #ffffff 0%, var(--paper-alt) 100%);
+      background: linear-gradient(180deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.03) 100%);
       padding: 18px 18px 16px;
     }}
     .callout h3 {{ margin-top: 0; font-size: 1rem; color: var(--text); }}
@@ -770,8 +839,8 @@ def html_report(payload: dict, manifest: dict, nuclei_results: list[dict]) -> st
       padding: 4px 10px;
       font-size: 0.65rem;
       line-height: 1;
-      background: #f7f7f7;
-      color: var(--text-muted);
+      background: rgba(255,255,255,0.04);
+      color: var(--text-soft);
     }}
     .pill {{
       display: inline-flex;
@@ -781,24 +850,25 @@ def html_report(payload: dict, manifest: dict, nuclei_results: list[dict]) -> st
       font-size: 0.68rem;
       font-family: "IBM Plex Mono", monospace;
       border: 1px solid var(--line);
-      background: #fff;
+      background: rgba(255,255,255,0.04);
+      color: var(--text-soft);
     }}
-    .pill.port {{ color: var(--text-soft); border-color: var(--line); background: #fff; }}
+    .pill.port {{ color: var(--text-soft); border-color: var(--line); background: rgba(255,255,255,0.03); }}
     .pill.port.danger {{ color: var(--risk-red-text); border-color: var(--risk-red-line); background: var(--risk-red-bg); }}
     .pill.port.warn {{ color: var(--risk-orange-text); border-color: var(--risk-orange-line); background: var(--risk-orange-bg); }}
     .pill.vuln {{ color: var(--risk-red-text); border-color: var(--risk-red-line); background: var(--risk-red-bg); }}
     .pill-group {{ display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }}
-    .badge-neutral {{ background: #eef2f6 !important; color: var(--text-soft) !important; border-color: var(--line) !important; }}
-    .evidence-table {{ width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; font-size: 0.86rem; background: #fff; }}
+    .badge-neutral {{ background: rgba(255,255,255,0.05) !important; color: var(--text-soft) !important; border-color: var(--line) !important; }}
+    .evidence-table {{ width: 100%; border-collapse: separate; border-spacing: 0; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; font-size: 0.86rem; background: rgba(255,255,255,0.03); }}
     .evidence-table th, .evidence-table td {{ text-align: left; vertical-align: top; padding: 11px 14px; border-bottom: 1px solid var(--line); }}
-    .evidence-table th {{ background: #f7f9fb; color: var(--text-muted); font-size: 0.65rem; text-transform: uppercase; font-family: "IBM Plex Mono", monospace; }}
+    .evidence-table th {{ background: rgba(255,255,255,0.05); color: var(--text-muted); font-size: 0.65rem; text-transform: uppercase; font-family: "IBM Plex Mono", monospace; }}
     .evidence-table tr:last-child td {{ border-bottom: 0; }}
     .badge-critical {{ background: var(--risk-red-bg) !important; color: var(--risk-red-text) !important; border-color: var(--risk-red-line) !important; }}
     .badge-high {{ background: var(--risk-red-bg) !important; color: var(--risk-red-text) !important; border-color: var(--risk-red-line) !important; }}
     .badge-medium {{ background: var(--risk-orange-bg) !important; color: var(--risk-orange-text) !important; border-color: var(--risk-orange-line) !important; }}
-    .badge-low {{ background: #f7f9fb !important; color: var(--text-soft) !important; border-color: var(--line) !important; }}
+    .badge-low {{ background: rgba(255,255,255,0.05) !important; color: var(--text-soft) !important; border-color: var(--line) !important; }}
     .host-card {{
-      background: #ffffff;
+      background: var(--surface);
       border: 1px solid var(--line);
       border-radius: var(--radius-md);
       padding: 22px;
@@ -817,7 +887,7 @@ def html_report(payload: dict, manifest: dict, nuclei_results: list[dict]) -> st
       height: 34px;
       border-radius: 999px;
       border: 1px solid var(--line);
-      background: #f7f9fb;
+      background: rgba(255,255,255,0.05);
       color: var(--text-soft);
       font: 700 0.82rem/1 "IBM Plex Mono", monospace;
       cursor: pointer;
@@ -825,7 +895,7 @@ def html_report(payload: dict, manifest: dict, nuclei_results: list[dict]) -> st
     }}
     .intel-trigger:hover {{
       border-color: var(--line-strong);
-      background: #eef2f6;
+      background: rgba(76,246,255,0.10);
       transform: translateY(-1px);
     }}
     .risk-badge {{
@@ -844,10 +914,10 @@ def html_report(payload: dict, manifest: dict, nuclei_results: list[dict]) -> st
     .section-label {{ margin-top: 2px; font: 600 0.68rem/1 "IBM Plex Mono", monospace; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.06em; }}
     .risk-factors ul {{ margin: 0; padding-left: 18px; font-size: 0.85rem; color: var(--text-muted); }}
     .risk-factors li + li {{ margin-top: 4px; }}
-    .shot-frame {{ margin: 0; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: #fff; }}
+    .shot-frame {{ margin: 0; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; background: rgba(255,255,255,0.03); }}
     .shot {{ width: 100%; display: block; }}
-    .shot-caption {{ padding: 10px 12px; border-top: 1px solid var(--line); background: #f8fafc; font-size: 0.62rem; color: var(--text-muted); }}
-    .evidence-strip {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: #fbfcfd; }}
+    .shot-caption {{ padding: 10px 12px; border-top: 1px solid var(--line); background: rgba(255,255,255,0.05); font-size: 0.62rem; color: var(--text-muted); }}
+    .evidence-strip {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: rgba(255,255,255,0.03); }}
     .evidence-strip .full {{ grid-column: 1 / -1; }}
     .dns-value {{
       display: block;
@@ -855,7 +925,7 @@ def html_report(payload: dict, manifest: dict, nuclei_results: list[dict]) -> st
       padding: 10px 12px;
       border: 1px solid var(--line);
       border-radius: 10px;
-      background: #f8fafc;
+      background: rgba(255,255,255,0.05);
       font-size: 0.76rem;
       white-space: pre-wrap;
       word-break: break-word;
@@ -874,7 +944,7 @@ def html_report(payload: dict, manifest: dict, nuclei_results: list[dict]) -> st
     .intel-modal-backdrop {{
       position: absolute;
       inset: 0;
-      background: rgba(16, 18, 20, 0.48);
+      background: rgba(1, 4, 10, 0.72);
       backdrop-filter: blur(4px);
     }}
     .intel-panel {{
@@ -882,7 +952,7 @@ def html_report(payload: dict, manifest: dict, nuclei_results: list[dict]) -> st
       width: min(920px, 100%);
       max-height: min(82vh, 920px);
       overflow: auto;
-      background: #ffffff;
+      background: var(--surface-2);
       border: 1px solid var(--line);
       border-radius: 24px;
       box-shadow: 0 24px 70px rgba(16, 18, 20, 0.18);
@@ -904,7 +974,7 @@ def html_report(payload: dict, manifest: dict, nuclei_results: list[dict]) -> st
       height: 36px;
       border-radius: 999px;
       border: 1px solid var(--line);
-      background: #f7f9fb;
+      background: rgba(255,255,255,0.05);
       color: var(--text-soft);
       font: 700 0.78rem/1 "IBM Plex Mono", monospace;
       cursor: pointer;
@@ -918,7 +988,7 @@ def html_report(payload: dict, manifest: dict, nuclei_results: list[dict]) -> st
       padding: 12px 14px;
       border: 1px solid var(--line);
       border-radius: 14px;
-      background: #fbfcfd;
+      background: rgba(255,255,255,0.04);
     }}
     .intel-fact.full {{ grid-column: 1 / -1; }}
     .intel-fact strong {{
@@ -996,7 +1066,7 @@ def html_report(payload: dict, manifest: dict, nuclei_results: list[dict]) -> st
         <p><strong>Patrick Binder</strong></p>
         <p class="small muted">Offensive Cybersecurity Expert specializing in Microsoft Cloud pentesting and adversarial research.</p>
         <div style="margin-top: 12px;">
-          <a href="https://patrickbrand34846.z6.web.core.windows.net/" class="badge" style="text-decoration: none;">[ Portfolio ]</a>
+          <a href="https://www.patrick-binder.de/" class="badge" style="text-decoration: none;">[ Portfolio ]</a>
         </div>
       </section>
     </aside>
@@ -1008,6 +1078,11 @@ def html_report(payload: dict, manifest: dict, nuclei_results: list[dict]) -> st
             <p class="cover-kicker">External Attack Surface Management Report</p>
             <h1>{escape(target.get('core_domain', ''))}</h1>
             <p class="lede">Comprehensive analysis of the external attack surface, structured to highlight priority exposure, supporting evidence, and the assets that merit the earliest analyst review.</p>
+            <div class="hero-meta">
+              <span class="hero-pill">Report Mode <strong>Executive Brief</strong></span>
+              <span class="hero-pill">Scope <strong>{escape(target.get('interface', 'Selected Interface'))}</strong></span>
+              <span class="hero-pill">Status <strong class="badge badge-{overall_badge_class}">{escape(overall_state)}</strong></span>
+            </div>
             <div class="metric-grid">
               {summary_card_html}
             </div>
@@ -1017,6 +1092,21 @@ def html_report(payload: dict, manifest: dict, nuclei_results: list[dict]) -> st
             <h2>1. Executive Summary</h2>
             <p>The external reconnaissance scope for <strong>{escape(target.get('core_domain', ''))}</strong> identified {asset_total} discovered assets, of which {len(hosts)} were prioritized for deeper analysis based on exposure, service composition, and observed risk indicators.</p>
             <p>Overall exposure is assessed as <strong>{overall_state}</strong>. The most relevant findings are concentrated in exposed web services, vulnerable internet-facing hosts, and a small set of infrastructure entries requiring analyst review first.</p>
+            <div class="section-template">
+              <article class="template-card">
+                <h3>Assessment Framing</h3>
+                <p class="small muted">This report is optimized for triage, evidence review, and prioritization. It distinguishes observed exposure from confirmed vulnerability so analysts can move quickly without over-claiming.</p>
+                <div class="template-stat"><span>Primary signal</span><strong>Exposure + evidence</strong></div>
+                <div class="template-stat"><span>Validation model</span><strong>Deterministic, offline readable</strong></div>
+                <div class="template-stat"><span>Action level</span><strong>Top 10 first</strong></div>
+              </article>
+              <article class="template-card">
+                <h3>At-a-Glance State</h3>
+                <div class="template-stat"><span>Assets discovered</span><strong>{escape(str(asset_total))}</strong></div>
+                <div class="template-stat"><span>Priority targets</span><strong>{escape(str(len(hosts)))}</strong></div>
+                <div class="template-stat"><span>Web exposures</span><strong>{escape(str(web_count))}</strong></div>
+              </article>
+            </div>
             <div class="callout" style="margin-top: 20px;">
               <h3>Observed Infrastructure Vulnerabilities</h3>
               <p class="small muted">Key vulnerabilities identified via host intelligence across the discovered infrastructure.</p>
@@ -1126,7 +1216,7 @@ def html_report(payload: dict, manifest: dict, nuclei_results: list[dict]) -> st
           </section>
 
           <footer style="margin-top: 60px; padding-top: 20px; border-top: 1px solid var(--line); display: flex; justify-content: space-between; gap: 12px;">
-            <div class="footer-meta">C3PO-SHODAN // EASM ENGINE</div>
+            <div class="footer-meta">C3PO-LOCAL // EASM ENGINE</div>
             <div class="footer-meta">CONFIDENTIAL RECONNAISSANCE DATA</div>
           </footer>
         </div>
