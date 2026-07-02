@@ -1,0 +1,2 @@
+{"command_id":"nxc-smb-1","host":"10.10.10.10","normalized_message":"SMB signing: required","protocol":"smb","domain":"example.internal","hostname":"host01.example.internal"}
+{"command_id":"nxc-ldap-1","host":"10.10.10.11","normalized_message":"LDAP domain=example.internal baseDN=DC=example,DC=internal","protocol":"ldap","domain":"example.internal","hostname":"host02.example.internal"}
