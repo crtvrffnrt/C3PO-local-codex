@@ -248,6 +248,39 @@ class LocalScannerTests(unittest.TestCase):
             self.assertEqual(data["fritzbox_status"], "reachable_and_prioritized")
             self.assertIsInstance(data["hosts"], list)
 
+    def test_requested_cidr_filters_scope_to_single_network(self):
+        ctx = {
+            "interface": "tun0",
+            "addresses": ["10.81.0.2/24"],
+            "candidate_networks": [ipaddress.ip_network("10.1.0.0/16"), ipaddress.ip_network("172.16.16.0/24"), ipaddress.ip_network("192.168.178.0/24")],
+            "networks": [ipaddress.ip_network("10.1.0.0/16"), ipaddress.ip_network("172.16.16.0/24"), ipaddress.ip_network("192.168.178.0/24")],
+            "validated_networks": [ipaddress.ip_network("10.1.0.0/16"), ipaddress.ip_network("172.16.16.0/24"), ipaddress.ip_network("192.168.178.0/24")],
+            "gateways": [],
+            "route_excluded_networks": [],
+            "route_overlap_warnings": [],
+            "route_get_samples": [],
+        }
+        filtered = scanner.apply_requested_scope(ctx, ipaddress.ip_network("172.16.16.0/24"))
+        self.assertEqual(filtered["networks"], [ipaddress.ip_network("172.16.16.0/24")])
+        self.assertEqual(filtered["validated_networks"], [ipaddress.ip_network("172.16.16.0/24")])
+        self.assertEqual(filtered["candidate_networks"], [ipaddress.ip_network("172.16.16.0/24")])
+        self.assertEqual(filtered["requested_network"], "172.16.16.0/24")
+
+    def test_requested_cidr_rejected_when_not_effectively_routed(self):
+        ctx = {
+            "interface": "tun0",
+            "addresses": ["10.81.0.2/24"],
+            "candidate_networks": [ipaddress.ip_network("10.1.0.0/16")],
+            "networks": [ipaddress.ip_network("10.1.0.0/16")],
+            "validated_networks": [ipaddress.ip_network("10.1.0.0/16")],
+            "gateways": [],
+            "route_excluded_networks": [],
+            "route_overlap_warnings": [],
+            "route_get_samples": [],
+        }
+        with self.assertRaises(SystemExit):
+            scanner.apply_requested_scope(ctx, ipaddress.ip_network("172.16.16.0/24"))
+
     def test_top_ten_includes_two_dcs(self):
         hosts = {
             "10.10.10.10": scanner.Host(ip="10.10.10.10"),

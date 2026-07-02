@@ -20,6 +20,7 @@ Required:
   -i, --interface IFACE   Network interface to assess, for example eth0 or wlan0
 
 Options:
+  -c, --cidr CIDR         Optional CIDR to narrow scope to a single routed subnet
   -v, --verbose           Print verbose scanner output
   --dry-run               Validate interface and scope, then render a scope report only
   --authorized            Acknowledge authorization non-interactively
@@ -28,10 +29,12 @@ Options:
 Examples:
   ./run.sh -i eth0
   ./run.sh -i wlan0
+  ./run.sh -i tun0 --cidr 172.16.16.0/24
 EOF
 }
 
 IFACE=""
+CIDR=""
 VERBOSE=false
 DRY_RUN=false
 AUTHORIZED=false
@@ -45,6 +48,15 @@ while [[ $# -gt 0 ]]; do
         exit 1
       fi
       IFACE="${2:-}"
+      shift 2
+      ;;
+    -c|--cidr)
+      if [ -z "${2:-}" ]; then
+        echo -e "${RED}[!] Missing value for $1${NC}" >&2
+        usage
+        exit 1
+      fi
+      CIDR="${2:-}"
       shift 2
       ;;
     -v|--verbose)
@@ -84,6 +96,9 @@ fi
 
 echo -e "${GREEN}[+] Local Attack Surface Scanner${NC}"
 echo -e "${GREEN}[+] Interface: ${IFACE}${NC}"
+if [ -n "$CIDR" ]; then
+  echo -e "${GREEN}[+] CIDR scope override: ${CIDR}${NC}"
+fi
 
 cat <<'EOF'
 
@@ -139,6 +154,9 @@ else
 fi
 
 ARGS=(--interface "$IFACE")
+if [ -n "$CIDR" ]; then
+  ARGS+=(--cidr "$CIDR")
+fi
 ARGS+=(--authorized)
 if [ -n "$CODEX_MODEL" ]; then
   ARGS+=(--codex-model "$CODEX_MODEL" --codex-reasoning "$CODEX_REASONING")

@@ -106,6 +106,7 @@ class RouteEntry:
 @dataclass
 class RouteScope:
     interface: str
+    requested_network: str
     addresses: list[str]
     candidate_networks: list[ipaddress.IPv4Network]
     validated_networks: list[ipaddress.IPv4Network]
@@ -145,6 +146,7 @@ def write_json_file(path: Path, data: Any) -> None:
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Interface-scoped local-network scanner")
     parser.add_argument("-i", "--interface", required=True)
+    parser.add_argument("-c", "--cidr", default="")
     parser.add_argument("--authorized", "--i-own-this-scope", action="store_true", dest="authorized")
     parser.add_argument("--codex-model", default="")
     parser.add_argument("--codex-reasoning", default="")
@@ -375,6 +377,7 @@ def validate_route_scope(
     route_dev_entries: list[RouteEntry],
     route_main_entries: list[RouteEntry],
     outdir: Path,
+    requested_network: ipaddress.IPv4Network | None = None,
 ) -> RouteScope:
     candidate_networks = route_candidates_from_context(addr_data, route_dev_entries + route_main_entries, iface)
     route_get_samples: list[dict[str, Any]] = []
@@ -422,8 +425,15 @@ def validate_route_scope(
             if effective_via:
                 reason += f" via {effective_via}"
             excluded_networks.append(reason)
+    if requested_network is not None:
+        candidate_networks = [network for network in candidate_networks if network == requested_network]
+        validated = [network for network in validated if network == requested_network]
+        excluded_networks = [reason for reason in excluded_networks if str(requested_network) in reason]
+        if str(requested_network) not in [str(net) for net in candidate_networks]:
+            excluded_networks.append(f"{requested_network} excluded: not derived from interface routes or addresses")
     return RouteScope(
         interface=iface,
+        requested_network=str(requested_network) if requested_network is not None else "",
         addresses=[],
         candidate_networks=sorted(candidate_networks, key=lambda n: (int(n.network_address), n.prefixlen)),
         validated_networks=sorted(dict.fromkeys(validated), key=lambda n: (int(n.network_address), n.prefixlen)),
@@ -506,9 +516,40 @@ def get_interface_context(iface: str, outdir: Path) -> dict[str, Any]:
     }
 
 
+def parse_requested_network(value: str) -> ipaddress.IPv4Network | None:
+    if not value:
+        return None
+    try:
+        net = ipaddress.ip_network(value, strict=False)
+    except ValueError as exc:
+        raise SystemExit(f"[!] Invalid CIDR override: {value}") from exc
+    if not isinstance(net, ipaddress.IPv4Network):
+        raise SystemExit("[!] CIDR override must be IPv4.")
+    if not ipv4_scope_allowed(net):
+        raise SystemExit(f"[!] CIDR override is not in allowed private scope: {net}")
+    return net
+
+
+def apply_requested_scope(ctx: dict[str, Any], requested_network: ipaddress.IPv4Network | None) -> dict[str, Any]:
+    if requested_network is None:
+        return ctx
+    networks = [net for net in ctx["networks"] if net == requested_network]
+    validated_networks = [net for net in ctx["validated_networks"] if net == requested_network]
+    if not networks or not validated_networks:
+        raise SystemExit(f"[!] CIDR override {requested_network} is not effectively routed via {ctx['interface']}.")
+    ctx = dict(ctx)
+    ctx["candidate_networks"] = networks
+    ctx["networks"] = validated_networks
+    ctx["validated_networks"] = validated_networks
+    ctx["scan_networks"] = validated_networks
+    ctx["requested_network"] = str(requested_network)
+    return ctx
+
+
 def write_scope(ctx: dict[str, Any], outdir: Path) -> None:
     scope = {
         "interface": ctx["interface"],
+        "requested_network": ctx.get("requested_network", ""),
         "addresses": ctx["addresses"],
         "candidate_networks": ctx.get("candidate_networks", [str(n) for n in ctx["networks"]]),
         "validated_networks": [str(n) for n in ctx["networks"]],
@@ -1794,7 +1835,9 @@ def main() -> int:
     info(f"Run directory: {outdir}")
     performance: dict[str, Any] = {"scan_batches": [], "screenshots": []}
     deps = tool_versions(outdir)
+    requested_network = parse_requested_network(args.cidr)
     ctx = get_interface_context(args.interface, outdir)
+    ctx = apply_requested_scope(ctx, requested_network)
     write_scope(ctx, outdir)
     info("Detected local scope: " + ", ".join(map(str, ctx["networks"])))
     if os.geteuid() != 0:

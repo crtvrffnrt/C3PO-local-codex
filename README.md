@@ -39,6 +39,12 @@ Primary path:
 ./run.sh -i wlan0
 ```
 
+To narrow scope to one routed subnet while still using the selected interface:
+
+```bash
+./run.sh -i tun0 --cidr 172.16.16.0/24
+```
+
 The wrapper displays an authorization banner, requires explicit acknowledgement, and then asks for a Codex model/reasoning profile:
 
 - GPT-5.5 High
@@ -53,6 +59,7 @@ For automation:
 ```bash
 ./run.sh -i wlan0 --authorized
 ./run.sh -i wlan0 --authorized --dry-run
+./run.sh -i tun0 --cidr 172.16.16.0/24 --authorized --dry-run
 ```
 
 This installed Codex CLI supports `--model` but does not expose a documented reasoning-effort flag. C3PO records the selected reasoning profile and includes it in Codex prompts; it does not guess unsupported flags.
