@@ -1,8 +1,27 @@
+<div align="center">
+ 
+
+  <h1>C3PO-local-codex<h1>
+  <img src="logo.jpg" alt="C3PO-shodan logo" width="360">
+
+  <p><strong>A nmap,nxc and nuclei driven scanning pipeline for mapping local infrastructure orchestrated by codex cli <p>
+
+  <p>
+    <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.10+"></a>
+    <a href="https://www.gnu.org/software/bash/"><img src="https://img.shields.io/badge/shell-bash-121011?style=flat-square&logo=gnu-bash&logoColor=white" alt="Bash"></a>
+    <a href="https://github.com/projectdiscovery/nuclei"><img src="https://img.shields.io/badge/scanner-Nuclei-0F766E?style=flat-square" alt="Nuclei"></a>
+    <a href="https://github.com/projectdiscovery/httpx"><img src="https://img.shields.io/badge/enrichment-httpx-2563EB?style=flat-square" alt="httpx"></a>
+  </p>
+</div>
+
+
 # C3PO Local Network Scanner
 
 C3PO Local is a self-contained scanner for authorized internal networks. It derives scope from a selected Linux interface, discovers reachable local hosts, ranks up to 10 high-priority systems, runs deeper safe enumeration only against those hosts, and writes a standalone HTML report.
 
 It is aimed at pre-authentication and unauthenticated reconnaissance of internal infrastructure, including Windows-oriented environments such as domain-controller and common server networks where valid credentials may not be available.
+
+
 
 ## Usage
 
