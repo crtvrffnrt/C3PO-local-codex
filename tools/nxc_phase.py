@@ -259,16 +259,27 @@ def parse_output(protocol: str, command_id: str, run_id: str, stdout_path: Path,
             msg = match.group(4)
         else:
             msg = raw
+        hostname = ""
+        domain = ""
         if "signing:" in raw.lower():
             attrs["smb_signing"] = raw
         if "smbv1:" in raw.lower():
             attrs["smbv1"] = raw
+        for source in (msg, raw):
+            if not hostname:
+                match = re.search(r"\b(?:hostname|computer name|netbios name)\s*[:=]\s*([A-Za-z0-9._-]+)", source, re.I)
+                if match:
+                    hostname = match.group(1)
+            if not domain:
+                match = re.search(r"\b(?:domain|workgroup)\s*[:=]\s*([A-Za-z0-9._-]+(?:\.[A-Za-z0-9._-]+)*)", source, re.I)
+                if match:
+                    domain = match.group(1)
         if "[+]" in raw:
             finding_type = "auth_success" if "pwn3d" not in raw.lower() else "admin_rights"
             append_jsonl(out / "jsonl/findings.jsonl", {"finding_id": f"{command_id}-{abs(hash(raw))}", "run_id": run_id, "command_id": command_id, "timestamp": utc_now(), "protocol": protocol, "host": host, "port": port, "finding_type": finding_type, "severity": "Info", "confidence": "medium", "redacted_evidence": raw, "raw_reference": str(stdout_path), "metadata": attrs})
         if "signing:false" in raw.lower() or "signing: false" in raw.lower():
             append_jsonl(out / "jsonl/findings.jsonl", {"finding_id": f"{command_id}-signing-{host}", "run_id": run_id, "command_id": command_id, "timestamp": utc_now(), "protocol": protocol, "host": host, "port": port, "finding_type": "smb_signing_disabled", "severity": "Medium", "confidence": "medium", "redacted_evidence": raw, "raw_reference": str(stdout_path), "metadata": attrs})
-        append_jsonl(out / "jsonl/events.jsonl", {"event_id": f"{command_id}-{abs(hash(raw))}", "command_id": command_id, "run_id": run_id, "timestamp": utc_now(), "source": "nxc", "protocol": protocol, "host": host, "port": port, "hostname": "", "domain": "", "os": "", "normalized_message": msg, "raw_redacted_line": raw, "attributes": attrs})
+        append_jsonl(out / "jsonl/events.jsonl", {"event_id": f"{command_id}-{abs(hash(raw))}", "command_id": command_id, "run_id": run_id, "timestamp": utc_now(), "source": "nxc", "protocol": protocol, "host": host, "port": port, "hostname": hostname, "domain": domain, "os": "", "normalized_message": msg, "raw_redacted_line": raw, "attributes": attrs})
 
 
 def main() -> int:

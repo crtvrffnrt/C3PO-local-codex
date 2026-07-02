@@ -1,3 +1,4 @@
+import base64
 import ipaddress
 import importlib.util
 import json
@@ -155,6 +156,58 @@ class LocalScannerTests(unittest.TestCase):
             self.assertIn(ipaddress.ip_network("192.168.100.0/24"), scope.validated_networks)
             self.assertTrue(any(item["network"] == "192.168.100.0/24" for item in scope.overlap_warnings))
 
+    def test_requested_cidr_nested_within_validated_route_is_allowed(self):
+        addr_data = [{"addr_info": [{"family": "inet", "local": "10.20.30.2", "prefixlen": 24}]}]
+        route_dev = scanner.parse_ipv4_route_table((FIXTURES / "tun0_route_main.txt").read_text(), source="dev:tun0")
+        route_main = scanner.parse_ipv4_route_table((FIXTURES / "tun0_route_main.txt").read_text(), source="main")
+        outputs = {
+            "10.1.0.1": "10.1.0.1 via 10.20.30.1 dev tun0 src 10.20.30.2",
+            "10.20.30.1": "10.20.30.1 dev tun0 src 10.20.30.2",
+            "10.10.10.1": "10.10.10.1 via 10.20.30.1 dev tun0 src 10.20.30.2",
+            "192.168.100.1": "192.168.100.1 via 10.20.30.1 dev tun0 src 10.20.30.2",
+        }
+        requested = ipaddress.ip_network("192.168.100.0/28")
+
+        def fake_run_command(cmd, outdir, name, timeout, check=False):
+            rep = cmd[-1]
+            stdout_path = outdir / "logs" / f"{name}.stdout.txt"
+            stderr_path = outdir / "logs" / f"{name}.stderr.txt"
+            stdout_path.parent.mkdir(parents=True, exist_ok=True)
+            stdout_path.write_text(outputs.get(rep, ""), encoding="utf-8")
+            stderr_path.write_text("", encoding="utf-8")
+            return {
+                "name": name,
+                "argv": cmd,
+                "redacted_argv": cmd,
+                "start": "now",
+                "timeout_seconds": timeout,
+                "stdout_path": str(stdout_path.relative_to(outdir)),
+                "stderr_path": str(stderr_path.relative_to(outdir)),
+                "exit_code": 0,
+                "timed_out": False,
+                "error": "",
+                "end": "now",
+                "duration_seconds": 0.01,
+            }
+
+        with tempfile.TemporaryDirectory() as tmp, patch.object(scanner, "run_command", side_effect=fake_run_command):
+            scope = scanner.validate_route_scope("tun0", addr_data, route_dev, route_main, Path(tmp), requested_network=requested)
+            self.assertIn(requested, scope.validated_networks)
+            self.assertTrue(any(item["network"] == str(requested) and item["effective_dev"] == "tun0" for item in scope.route_get_samples))
+            ctx = {
+                "interface": "tun0",
+                "candidate_networks": scope.candidate_networks,
+                "networks": scope.validated_networks,
+                "validated_networks": scope.validated_networks,
+                "gateways": [],
+                "route_excluded_networks": scope.excluded_networks,
+                "route_overlap_warnings": scope.overlap_warnings,
+                "route_get_samples": scope.route_get_samples,
+            }
+            filtered = scanner.apply_requested_scope(ctx, requested)
+            self.assertEqual(filtered["networks"], [requested])
+            self.assertEqual(filtered["validated_networks"], [requested])
+
     def test_fritzbox_prioritization(self):
         host = scanner.Host(ip="192.168.100.1")
         host.sources.add("gateway")
@@ -167,6 +220,9 @@ class LocalScannerTests(unittest.TestCase):
             "10.10.10.10": scanner.Host(ip="10.10.10.10"),
             "10.10.10.11": scanner.Host(ip="10.10.10.11"),
         }
+        for ip in hosts:
+            for port in [53, 88, 389, 445]:
+                hosts[ip].services[port] = scanner.Service(port=port, name="svc")
 
         def fake_command_exists(name):
             return name == "dig"
@@ -220,28 +276,50 @@ class LocalScannerTests(unittest.TestCase):
             candidates = scanner.discover_domain_controllers({"networks": [ipaddress.ip_network("10.10.10.0/24")], "gateways": []}, hosts, Path(tmp), {"scan_batches": []}, False)
             self.assertIn("10.10.10.10", candidates)
             self.assertEqual(candidates["10.10.10.10"]["confidence"], "high")
-            self.assertIn("Identity services exposed", " ".join(candidates["10.10.10.10"]["evidence"]))
+            self.assertTrue(candidates["10.10.10.10"]["confirmed"])
+            self.assertIn("Kerberos + LDAP/LDAPS + SMB port mix", " ".join(candidates["10.10.10.10"]["evidence"]))
 
     def test_nxc_dc_inference(self):
         hosts = {
             "10.10.10.10": scanner.Host(ip="10.10.10.10"),
-            "10.10.10.50": scanner.Host(ip="10.10.10.50"),
         }
-        hosts["10.10.10.10"].services[389] = scanner.Service(port=389, name="ldap", product="Microsoft Windows Active Directory LDAP")
-        hosts["10.10.10.10"].services[445] = scanner.Service(port=445, name="microsoft-ds", product="Windows Server")
+        for port in [53, 88, 389, 445]:
+            hosts["10.10.10.10"].services[port] = scanner.Service(port=port, name="svc")
         with tempfile.TemporaryDirectory() as tmp, patch.object(scanner, "command_exists", return_value=False):
             nxc_out = Path(tmp) / "nxc"
             (nxc_out / "jsonl").mkdir(parents=True, exist_ok=True)
             (nxc_out / "reports").mkdir(parents=True, exist_ok=True)
             (nxc_out / "json").mkdir(parents=True, exist_ok=True)
-            (nxc_out / "jsonl" / "events.jsonl").write_text((FIXTURES / "nxc_dc_events.jsonl").read_text(), encoding="utf-8")
+            (nxc_out / "jsonl" / "events.jsonl").write_text(
+                json.dumps(
+                    {
+                        "command_id": "nxc-smb-1",
+                        "host": "10.10.10.10",
+                        "normalized_message": "Active Directory domain controller detected",
+                        "protocol": "smb",
+                        "domain": "example.internal",
+                        "hostname": "dc01.example.internal",
+                    }
+                )
+                + "\n",
+                encoding="utf-8",
+            )
             (nxc_out / "jsonl" / "findings.jsonl").write_text("", encoding="utf-8")
             (nxc_out / "reports" / "markdown-summary.md").write_text("# NXC Summary\n\nProtocols: smb, ldap\n", encoding="utf-8")
             (nxc_out / "json" / "summary.json").write_text(json.dumps({"selected_protocols": ["smb", "ldap"]}), encoding="utf-8")
             candidates = scanner.discover_domain_controllers({"networks": [ipaddress.ip_network("10.10.10.0/24")], "gateways": []}, hosts, Path(tmp), {"scan_batches": []}, False, nxc_outdir=nxc_out)
             self.assertIn("10.10.10.10", candidates)
-            self.assertNotIn("10.10.10.50", candidates)
+            self.assertTrue(candidates["10.10.10.10"]["confirmed"])
             self.assertTrue(any("NXC output references" in item for item in candidates["10.10.10.10"]["evidence"]))
+
+    def test_router_like_services_do_not_trigger_dc_candidate(self):
+        host = scanner.Host(ip="192.168.178.1", hostname="fritz.box", netbios_name="FRITZBOX")
+        for port in [21, 53, 80, 443]:
+            host.services[port] = scanner.Service(port=port, name="svc")
+        hosts = {host.ip: host}
+        with tempfile.TemporaryDirectory() as tmp, patch.object(scanner, "command_exists", return_value=False):
+            candidates = scanner.discover_domain_controllers({"networks": [ipaddress.ip_network("192.168.178.0/24")], "gateways": []}, hosts, Path(tmp), {"scan_batches": []}, False)
+            self.assertEqual(candidates, {})
 
     def test_top_hosts_schema(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -353,6 +431,8 @@ class LocalScannerTests(unittest.TestCase):
             host.dc_confidence = "high"
             host.dc_evidence = ["DNS SRV", "LDAP", "Kerberos"]
             host.screenshot_path = "screenshots/dc01.png"
+            (out / host.screenshot_path).parent.mkdir(parents=True, exist_ok=True)
+            (out / host.screenshot_path).write_bytes(base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO2Xg7kAAAAASUVORK5CYII="))
             hosts = {host.ip: host}
             top_hosts = [host]
             findings = [{"severity": "High", "status": "inferred", "host": host.ip, "title": "Internal exposure on 389/ldap", "evidence": "tcp/389 ldap", "recommendation": "Restrict access", "cves": []}]
@@ -382,9 +462,14 @@ class LocalScannerTests(unittest.TestCase):
             )
             html_text = report.read_text(encoding="utf-8")
             self.assertIn("Management Summary", html_text)
-            self.assertIn("Validated tun0 networks", html_text)
-            self.assertIn("Domain Controller Candidates", html_text)
-            self.assertIn("Verification commands", html_text)
+            self.assertIn("Top Host Cards", html_text)
+            self.assertIn("Findings", html_text)
+            self.assertIn("Verification Commands", html_text)
+            self.assertIn("Scan Details / Misc", html_text)
+            self.assertIn("data:image/png;base64", html_text)
+            self.assertNotIn("screenshots/dc01.png", html_text)
+            self.assertNotIn("Performance", html_text)
+            self.assertNotIn("Nmap, Nuclei, and NXC Summary", html_text)
 
     def test_nxc_safety_gate_requires_authorization(self):
         result = subprocess.run(
@@ -426,6 +511,17 @@ class LocalScannerTests(unittest.TestCase):
             self.assertEqual(rc, 124)
             self.assertEqual(stdout, "partial")
             self.assertEqual(stderr, "late")
+
+    def test_nxc_parse_output_extracts_hostname_and_domain(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            (out / "jsonl").mkdir(parents=True, exist_ok=True)
+            stdout = out / "stdout.txt"
+            stdout.write_text("SMB 10.10.10.10 445 Computer name: HOST01 Domain: example.internal\n", encoding="utf-8")
+            NXC_PHASE.parse_output("smb", "cmd1", "run1", stdout, out)
+            events = [json.loads(line) for line in (out / "jsonl" / "events.jsonl").read_text(encoding="utf-8").splitlines() if line.strip()]
+            self.assertEqual(events[0]["hostname"], "HOST01")
+            self.assertEqual(events[0]["domain"], "example.internal")
 
     def test_no_active_shodan_or_docker_paths(self):
         allowed = {
