@@ -3,8 +3,7 @@
 
   <h1>C3PO-local-codex<h1>
   <img src="logo.jpg" alt="C3PO-shodan logo" width="360">
-
-  <p><strong>A nmap,nxc and nuclei driven scanning pipeline for mapping local infrastructure orchestrated by codex cli <p>
+  <p><strong>A multitool scanning pipeline for mapping local infrastructure orchestrated by codex cli.<p>
 
   <p>
     <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.10+"></a>
