@@ -2298,25 +2298,84 @@ def build_report_metrics(
     }
 
 
-def render_management_summary_table(metrics: dict[str, Any]) -> str:
-    rows = [
-        ("Hosts discovered", str(metrics["hosts_discovered"]), "All hosts seen during discovery and enrichment."),
-        ("Hosts with open ports", str(metrics["hosts_with_open_ports"]), "Hosts with at least one observed service."),
-        ("Critical findings", str(metrics["critical_findings"]), "Only confirmed or inferred critical issues."),
-        ("High findings", str(metrics["high_findings"]), "Highest-priority exposures in the finding set."),
-        ("Medium findings", str(metrics["medium_findings"]), "Useful follow-up and hardening work."),
-        ("Exposed management services", str(metrics["management_hosts"]), "SSH, RDP, WinRM, SMB, LDAP, DNS, and similar surfaces."),
-        ("Web interfaces found", str(metrics["web_hosts"]), "Internal HTTP or HTTPS panels and admin UIs."),
-        ("Domain controller confirmed", "yes" if metrics["dc_confirmed"] else "no", "Strict host-specific evidence only."),
-        ("Domain controller candidates", str(metrics["dc_candidates"]), "Credible but still unconfirmed identity targets."),
-        ("Route/scope warnings", str(metrics["route_warnings"]), "Overlapping routes or validation notes."),
-        ("Scan completed with partial results", metrics["partial_results"], "Timeouts or degraded phases were preserved."),
-        ("Screenshots embedded", metrics["screenshots_status"], f"{metrics['screenshots_embedded']}/{metrics['screenshots_attempted']} host screenshots embedded."),
-    ]
-    return "".join(
-        f"<tr><th>{esc(metric)}</th><td>{esc(result)}</td><td>{esc(comment)}</td></tr>"
-        for metric, result, comment in rows
+def render_management_summary_table(metrics: dict[str, Any], ceo_summary: str, priority_items: list[dict[str, str]]) -> str:
+    def metric_card(label: str, value: str, detail: str, tone: str = "") -> str:
+        classes = ["summary-card"]
+        if tone:
+            classes.append(f"severity-{tone}")
+        return f"""
+<article class="{' '.join(classes)}">
+  <div class="summary-card-label">{esc(label)}</div>
+  <div class="summary-card-value">{esc(value)}</div>
+  <div class="summary-card-detail">{esc(detail)}</div>
+</article>
+"""
+
+    top_hosts = metrics["top_hosts"][:3]
+    severity_badges = "".join(
+        f"<span class='badge severity-{tone}'>{esc(label)}: {esc(str(count))}</span>"
+        for label, count, tone in [
+            ("Critical", metrics["critical_findings"], "critical"),
+            ("High", metrics["high_findings"], "high"),
+            ("Medium", metrics["medium_findings"], "medium"),
+        ]
     )
+    focus_chips = "".join(
+        f"<span class='pill'>{esc(item['host'])} · {esc(item['title'])}</span>" for item in priority_items[:3]
+    ) or "<span class='muted'>No priority items were produced.</span>"
+    host_chips = "".join(
+        f"<span class='pill'>{esc(host.ip)}{f' · {esc(host.role_guess)}' if host.role_guess else ''}</span>"
+        for host in top_hosts
+    ) or "<span class='muted'>No ranked hosts available.</span>"
+    dc_value = f"{metrics['dc_confirmed']} confirmed"
+    if metrics["dc_candidates"]:
+        dc_value = f"{metrics['dc_confirmed']} confirmed / {metrics['dc_candidates']} candidates"
+    dc_detail = "Strict host-specific evidence only."
+    if metrics["dc_candidates"] and not metrics["dc_confirmed"]:
+        dc_detail = "Directory-style targets remain candidates until host-specific evidence is strong enough."
+    if metrics["dc_confirmed"] and metrics["dc_candidates"]:
+        dc_detail = "Confirmed hosts are separated from remaining candidates to keep role inference conservative."
+    if metrics["partial_results"] == "yes":
+        partial_detail = "Timeouts or degraded phases were preserved for later review."
+    else:
+        partial_detail = "No partial results were recorded in the finished phases."
+    screenshot_value = f"{metrics['screenshots_embedded']}/{metrics['screenshots_attempted']}"
+    if metrics["screenshots_attempted"]:
+        screenshot_detail = f"Embedded screenshot coverage is {metrics['screenshots_status']}."
+    else:
+        screenshot_detail = "No host screenshots were attempted."
+    cards = [
+        f"""
+<article class="summary-card summary-card--lead">
+  <div class="summary-card-label">Ciso Summary</div>
+  <div class="summary-card-title">Executive security brief</div>
+  <p class="summary-card-copy">{esc(ceo_summary)}</p>
+  <div class="summary-card-row">
+    {severity_badges}
+  </div>
+  <div class="summary-card-chip-label">Top ranked hosts</div>
+  <div class="summary-card-row">
+    {host_chips}
+  </div>
+  <div class="summary-card-chip-label">Priority focus</div>
+  <div class="summary-card-row">
+    {focus_chips}
+  </div>
+</article>
+""",
+        metric_card("Hosts discovered", str(metrics["hosts_discovered"]), "All hosts seen during discovery and enrichment."),
+        metric_card("Hosts with open ports", str(metrics["hosts_with_open_ports"]), "Hosts with at least one observed service."),
+        metric_card("Critical findings", str(metrics["critical_findings"]), "No critical exposure observed." if metrics["critical_findings"] == 0 else "Immediate containment or isolation review required.", "critical"),
+        metric_card("High findings", str(metrics["high_findings"]), "High-priority exposures that should be addressed next.", "high"),
+        metric_card("Medium findings", str(metrics["medium_findings"]), "Useful follow-up and hardening work.", "medium"),
+        metric_card("Exposed management services", str(metrics["management_hosts"]), "SSH, RDP, WinRM, SMB, LDAP, DNS, and similar surfaces."),
+        metric_card("Web interfaces found", str(metrics["web_hosts"]), "Internal HTTP or HTTPS panels and admin UIs."),
+        metric_card("Domain controller evidence", dc_value, dc_detail),
+        metric_card("Route / scope warnings", str(metrics["route_warnings"]), "Overlapping routes or validation notes."),
+        metric_card("Partial results", metrics["partial_results"], partial_detail),
+        metric_card("Screenshots embedded", screenshot_value, screenshot_detail),
+    ]
+    return f"<div class='summary-grid'>{''.join(cards)}</div>"
 
 
 def build_priority_findings(top_hosts: list[Host], findings: list[dict[str, Any]], dc_candidates: dict[str, dict[str, Any]]) -> list[dict[str, str]]:
@@ -2380,12 +2439,12 @@ def build_ceo_summary(metrics: dict[str, Any], priority_items: list[dict[str, st
     host_word = "host" if hosts == 1 else "hosts"
     surface_word = "surface" if management_hosts == 1 else "surfaces"
     if critical or high:
-        sentences.append(f"The scan did not prove active compromise, but it did surface {critical} critical and {high} high-priority findings that deserve follow-up.")
+        sentences.append(f"The scan did not establish active compromise, but it did surface {critical} critical and {high} high-priority findings that deserve near-term remediation.")
     else:
-        sentences.append("The environment looks broadly healthy. The scan mainly found a small number of reachable services that should be validated for business need and hardening.")
-    sentences.append(f"The main operational risk is the {management_hosts} internally reachable management or remote-administration {surface_word} across {hosts} discovered {host_word}, because in a mixed-trust home-office or small-office network a single compromised device can become a pivot point.")
+        sentences.append("The environment looks broadly healthy. The scan mainly found reachable services that should be validated for business need, patch state, and access control.")
+    sentences.append(f"The main operational risk is the {management_hosts} internally reachable management or remote-administration {surface_word} across {hosts} discovered {host_word}, because these services materially expand the attack surface and usually matter more than isolated low-value ports.")
     if web_hosts:
-        sentences.append(f"{web_hosts} host(s) also expose web interfaces, so ownership, authentication, and update status should be checked before the interfaces are left reachable on this segment.")
+        sentences.append(f"{web_hosts} host(s) also expose web interfaces, so ownership, authentication, and update status should be verified before the interfaces remain reachable on this segment.")
     if dc_confirmed or dc_candidates:
         if dc_confirmed:
             if dc_candidates:
@@ -2396,9 +2455,9 @@ def build_ceo_summary(metrics: dict[str, Any], priority_items: list[dict[str, st
             sentences.append(f"Directory-style services were only treated as candidates when multiple host-specific indicators lined up, which reduces the chance of false positives on router or printer-style devices.")
     if partial == "yes":
         sentences.append("A few commands timed out or returned partial output, so the report should be used as a prioritization aid rather than a final inventory.")
-    sentences.append("The right next step is to validate which exposed services are actually required, then harden, patch, or isolate the highest-ranked hosts first.")
+    sentences.append("The practical next step is to validate which exposed services are actually required, then harden, patch, or isolate the highest-ranked hosts first.")
     if priority_items:
-        sentences.append(f"The most urgent follow-up items are centered on {', '.join(item['host'] for item in priority_items[:3])}.")
+        sentences.append(f"The first review should focus on {', '.join(item['host'] for item in priority_items[:3])}.")
     return " ".join(sentences)
 
 
@@ -2755,8 +2814,29 @@ section { padding: 1.25rem; box-shadow: 0 18px 50px rgba(0,0,0,.04); }
 .summary-table .summary-result.partial { color: var(--sev-med-fg); }
 .summary-table .summary-result.high { color: var(--sev-high-fg); }
 .summary-table .summary-result.critical { color: var(--sev-crit-fg); }
-.priority-list { display: grid; gap: .75rem; margin: .25rem 0 0; padding: 0; list-style: none; }
-.priority-list li { padding: .85rem .9rem; border: 1px solid var(--line); border-radius: 10px; background: var(--glass-bg); }
+.summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1rem; margin-top: 1rem; }
+.summary-card { display: flex; flex-direction: column; gap: .55rem; padding: 1rem; border-radius: 16px; background: var(--glass-bg); border: 1px solid var(--glass-border); box-shadow: 0 14px 36px rgba(0,0,0,.03); min-height: 8rem; overflow: hidden; }
+.summary-card--lead { grid-column: 1 / -1; min-height: auto; }
+.summary-card-label, .summary-card-chip-label { font-family: var(--font-header); font-size: .74rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+.summary-card-title { font-family: var(--font-header); font-size: 1.2rem; font-weight: 800; letter-spacing: -.03em; color: var(--ink); }
+.summary-card-value { font-family: var(--font-header); font-size: clamp(1.75rem, 4vw, 2.6rem); line-height: 1; font-weight: 800; color: var(--ink); }
+.summary-card-copy, .summary-card-detail { color: var(--text); }
+.summary-card-copy { margin: 0; font-size: 1rem; }
+.summary-card-row { display: flex; flex-wrap: wrap; gap: .5rem; }
+.summary-card-chip-label { margin-top: .1rem; }
+.summary-card.severity-critical { background: var(--sev-crit-bg); border-color: var(--sev-crit-bd); color: var(--text); }
+.summary-card.severity-high { background: var(--sev-high-bg); border-color: var(--sev-high-bd); color: var(--text); }
+.summary-card.severity-medium { background: var(--sev-med-bg); border-color: var(--sev-med-bd); color: var(--text); }
+.summary-card.severity-critical .summary-card-value { color: var(--sev-crit-fg); }
+.summary-card.severity-high .summary-card-value { color: var(--sev-high-fg); }
+.summary-card.severity-medium .summary-card-value { color: var(--sev-med-fg); }
+.summary-section { margin-top: 1.1rem; }
+.priority-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: .9rem; margin: .25rem 0 0; padding: 0; list-style: none; }
+.priority-card { padding: 1rem; border: 1px solid var(--glass-border); border-radius: 14px; background: var(--glass-bg); display: flex; flex-direction: column; gap: .55rem; min-height: 7rem; }
+.priority-card.severity-critical { background: var(--sev-crit-bg); border-color: var(--sev-crit-bd); color: var(--text); }
+.priority-card.severity-high { background: var(--sev-high-bg); border-color: var(--sev-high-bd); color: var(--text); }
+.priority-card.severity-medium { background: var(--sev-med-bg); border-color: var(--sev-med-bd); color: var(--text); }
+.priority-card .priority-line { align-items: flex-start; }
 .priority-line { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
 .tabs { display: flex; flex-wrap: wrap; gap: .5rem; padding: 0 1.5rem; max-width: 1240px; margin: 0 auto; }
 .tab-button { color: var(--text); background: var(--surface); }
@@ -2831,109 +2911,136 @@ details summary { cursor: pointer; font-family: var(--font-header); font-weight:
 def report_js() -> str:
     return """
 (function () {
+  function safeGet(key, fallback) {
+    try {
+      var value = localStorage.getItem(key);
+      return value === null ? fallback : value;
+    } catch (err) {
+      return fallback;
+    }
+  }
+
+  function safeSet(key, value) {
+    try {
+      localStorage.setItem(key, value);
+    } catch (err) {}
+  }
+
   var meta = document.querySelector('meta[name="theme-color"]');
-  var themeToggle = document.getElementById('themeToggle');
-  var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab-button'));
-  var panels = Array.prototype.slice.call(document.querySelectorAll('.tab-panel'));
-  var storedTab = localStorage.getItem('c3po-report-tab') || 'top-hosts';
-  var storedTheme = localStorage.getItem('c3po-theme') || (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-  var rows = Array.prototype.slice.call(document.querySelectorAll('.finding-row'));
-  var queryInput = document.getElementById('findingQuery');
-  var queryForm = document.getElementById('findingSearch');
-  var severityFilter = 'all';
-  var tabIds = tabs.map(function (tab) { return tab.dataset.tabTarget; });
-  if (tabIds.indexOf(storedTab) === -1) storedTab = 'top-hosts';
+  var prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  var storedTheme = safeGet('c3po-theme', prefersDark ? 'dark' : 'light');
   if (storedTheme !== 'dark' && storedTheme !== 'light') storedTheme = 'light';
 
   function applyTheme(theme) {
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
-    localStorage.setItem('c3po-theme', theme);
+    safeSet('c3po-theme', theme);
     if (meta) meta.setAttribute('content', theme === 'dark' ? '#0A0A0A' : '#FAFAFA');
   }
 
-  function activateTab(target) {
-    var tabId = target || 'top-hosts';
+  function init() {
+    var themeToggle = document.getElementById('themeToggle');
+    var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab-button'));
+    var panels = Array.prototype.slice.call(document.querySelectorAll('.tab-panel'));
+    var storedTab = safeGet('c3po-report-tab', 'top-hosts');
+    var rows = Array.prototype.slice.call(document.querySelectorAll('.finding-row'));
+    var queryInput = document.getElementById('findingQuery');
+    var queryForm = document.getElementById('findingSearch');
+    var severityFilter = 'all';
+    var tabIds = tabs.map(function (tab) { return tab.dataset.tabTarget; });
+    if (tabIds.indexOf(storedTab) === -1) storedTab = 'top-hosts';
+
+    function activateTab(target) {
+      var tabId = target || 'top-hosts';
+      tabs.forEach(function (tab) {
+        var active = tab.dataset.tabTarget === tabId;
+        tab.classList.toggle('active', active);
+        tab.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+      panels.forEach(function (panel) {
+        panel.classList.toggle('active', panel.id === 'tab-' + tabId);
+      });
+      safeSet('c3po-report-tab', tabId);
+    }
+
+    function applyFindingFilters() {
+      var query = (queryInput && queryInput.value ? queryInput.value : '').trim().toLowerCase();
+      rows.forEach(function (row) {
+        var matchesText = !query || (row.dataset.search || row.textContent).toLowerCase().indexOf(query) !== -1;
+        var matchesSeverity = severityFilter === 'all' || row.dataset.findingSeverity === severityFilter;
+        row.style.display = matchesText && matchesSeverity ? '' : 'none';
+      });
+    }
+
+    function copyCommand(button) {
+      var command = button.getAttribute('data-command') || '';
+      if (!command) return;
+      var revert = function (text) {
+        button.textContent = text;
+        window.setTimeout(function () { button.textContent = 'Copy'; }, 1400);
+      };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(command).then(function () { revert('Copied'); }, function () { revert('Copy failed'); });
+        return;
+      }
+      var temp = document.createElement('textarea');
+      temp.value = command;
+      temp.setAttribute('readonly', 'readonly');
+      temp.style.position = 'absolute';
+      temp.style.left = '-9999px';
+      document.body.appendChild(temp);
+      temp.select();
+      try {
+        document.execCommand('copy');
+        revert('Copied');
+      } catch (err) {
+        revert('Copy failed');
+      }
+      document.body.removeChild(temp);
+    }
+
+    activateTab(storedTab);
+
+    if (themeToggle) {
+      themeToggle.addEventListener('click', function () {
+        var nextTheme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+        applyTheme(nextTheme);
+      });
+    }
+
     tabs.forEach(function (tab) {
-      var active = tab.dataset.tabTarget === tabId;
-      tab.classList.toggle('active', active);
-      tab.setAttribute('aria-selected', active ? 'true' : 'false');
+      tab.addEventListener('click', function () {
+        activateTab(tab.dataset.tabTarget);
+      });
     });
-    panels.forEach(function (panel) {
-      panel.classList.toggle('active', panel.id === 'tab-' + tabId);
-    });
-    localStorage.setItem('c3po-report-tab', tabId);
-  }
 
-  function applyFindingFilters() {
-    var query = (queryInput && queryInput.value ? queryInput.value : '').trim().toLowerCase();
-    rows.forEach(function (row) {
-      var matchesText = !query || (row.dataset.search || row.textContent).toLowerCase().indexOf(query) !== -1;
-      var matchesSeverity = severityFilter === 'all' || row.dataset.findingSeverity === severityFilter;
-      row.style.display = matchesText && matchesSeverity ? '' : 'none';
+    document.querySelectorAll('[data-finding-filter]').forEach(function (chip) {
+      chip.addEventListener('click', function () {
+        severityFilter = chip.dataset.findingFilter || 'all';
+        document.querySelectorAll('[data-finding-filter]').forEach(function (item) {
+          item.classList.toggle('active', item === chip);
+        });
+        applyFindingFilters();
+      });
     });
-  }
 
-  function copyCommand(button) {
-    var command = button.getAttribute('data-command') || '';
-    if (!command) return;
-    var revert = function (text) {
-      button.textContent = text;
-      window.setTimeout(function () { button.textContent = 'Copy'; }, 1400);
-    };
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(command).then(function () { revert('Copied'); }, function () { revert('Copy failed'); });
-      return;
-    }
-    var temp = document.createElement('textarea');
-    temp.value = command;
-    temp.setAttribute('readonly', 'readonly');
-    temp.style.position = 'absolute';
-    temp.style.left = '-9999px';
-    document.body.appendChild(temp);
-    temp.select();
-    try {
-      document.execCommand('copy');
-      revert('Copied');
-    } catch (err) {
-      revert('Copy failed');
-    }
-    document.body.removeChild(temp);
+    if (queryInput) queryInput.addEventListener('keyup', applyFindingFilters);
+    if (queryForm) queryForm.addEventListener('submit', function (event) { event.preventDefault(); applyFindingFilters(); });
+
+    document.addEventListener('click', function (event) {
+      var button = event.target.closest('.copy-command');
+      if (button) copyCommand(button);
+    });
+
+    applyFindingFilters();
   }
 
   applyTheme(storedTheme);
-  activateTab(storedTab);
-
-  if (themeToggle) {
-    themeToggle.addEventListener('click', function () {
-      var nextTheme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
-      applyTheme(nextTheme);
-    });
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init, { once: true });
+  } else {
+    init();
   }
-
-  tabs.forEach(function (tab) {
-    tab.addEventListener('click', function () {
-      activateTab(tab.dataset.tabTarget);
-    });
-  });
-
-  document.querySelectorAll('[data-finding-filter]').forEach(function (chip) {
-    chip.addEventListener('click', function () {
-      severityFilter = chip.dataset.findingFilter || 'all';
-      document.querySelectorAll('[data-finding-filter]').forEach(function (item) {
-        item.classList.toggle('active', item === chip);
-      });
-      applyFindingFilters();
-    });
-  });
-
-  if (queryInput) queryInput.addEventListener('keyup', applyFindingFilters);
-  if (queryForm) queryForm.addEventListener('submit', function (event) { event.preventDefault(); applyFindingFilters(); });
-
-  document.addEventListener('click', function (event) {
-    var button = event.target.closest('.copy-command');
-    if (button) copyCommand(button);
-  });
 })();
 """
 
@@ -2957,11 +3064,11 @@ def render_report(
     metrics = build_report_metrics(hosts, top_hosts, findings, dc_candidates, screenshot_summary, performance_summary, ctx)
     priority_items = build_priority_findings(top_hosts, findings, dc_candidates)
     ceo_summary = build_ceo_summary(metrics, priority_items)
-    management_rows = render_management_summary_table(metrics)
+    management_cards = render_management_summary_table(metrics, ceo_summary, priority_items)
     priority_html = "".join(
-        f"<li><div class='priority-line'><span class='badge severity-{severity_class(item['severity'])}'>{esc(item['severity'])}</span><strong>{esc(item['host'])}</strong><span>{esc(item['title'])}</span></div><div class='muted'>{esc(item['reason'])}</div></li>"
+        f"<li class='priority-card severity-{severity_class(item['severity'])}'><div class='priority-line'><span class='badge severity-{severity_class(item['severity'])}'>{esc(item['severity'])}</span><strong>{esc(item['host'])}</strong><span>{esc(item['title'])}</span></div><div class='muted'>{esc(item['reason'])}</div></li>"
         for item in priority_items
-    ) or "<li class='muted'>No high-priority items were produced.</li>"
+    ) or "<li class='priority-card muted'>No high-priority items were produced.</li>"
     top_hosts_html = "".join(render_host_card(host, findings, dc_candidates) for host in top_hosts) or "<div class='muted'>No top hosts available.</div>"
     findings_tab = render_findings_tab(findings)
     verification_tab = render_verification_tab(top_hosts, dc_candidates, performance_summary)
@@ -2990,9 +3097,11 @@ def render_report(
 <main>
 <section id="executive-summary">
   <h2>Management Summary</h2>
-  <div class="table-wrap"><table class="summary-table"><tbody>{management_rows}</tbody></table></div>
-  <div class="note" style="margin-top:1rem"><strong>CEO Summary</strong><p>{esc(ceo_summary)}</p></div>
-  <div class="note" style="margin-top:1rem"><strong>Priority Findings</strong><ul class="priority-list">{priority_html}</ul></div>
+  {management_cards}
+  <div class="summary-section">
+    <div class="tab-panel-head"><h3>Priority Findings</h3><div class="muted">Highest-priority items are listed first and color coded by severity.</div></div>
+    <ul class="priority-list">{priority_html}</ul>
+  </div>
 </section>
 <nav class="tabs" role="tablist" aria-label="Report sections">
   <button class="tab-button active" id="tab-top-hosts-btn" role="tab" aria-selected="true" aria-controls="tab-top-hosts" data-tab-target="top-hosts" type="button">Top Host Cards</button>
