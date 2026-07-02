@@ -108,7 +108,7 @@ Prioritize:
 - Hosts with Nuclei or NXC findings.
 - Hosts central to multiple observed protocols.
 
-Do not promote hosts based on global evidence alone. For example, NXC evidence mentioning `domain:bhl.local` or LDAP somewhere in the run must not mark every host as a domain-controller candidate. NXC-derived role evidence must be host-scoped: the host IP or hostname must appear in the relevant NXC event or finding.
+Do not promote hosts based on global evidence alone. For example, NXC evidence mentioning `domain:example.local` or LDAP somewhere in the run must not mark every host as a domain-controller candidate. NXC-derived role evidence must be host-scoped: the host IP or hostname must appear in the relevant NXC event or finding.
 
 After enrichment phases, preserve consistency:
 

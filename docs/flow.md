@@ -10,7 +10,7 @@
 8. Live hosts are written to `live-hosts.txt` and `live-hosts.json`.
 9. Fast Nmap scans live hosts only using an explicit bounded port set and timeout controls.
 10. `service-map.json` is written from parsed Nmap output.
-11. The deterministic scorer ranks hosts. Reachable `192.168.178.1` receives router/FritzBox priority.
+11. The deterministic scorer ranks hosts. Reachable `192.168.100.1` receives router/FritzBox priority.
 12. Codex receives structured host evidence and may select up to 10 top hosts. If Codex fails, deterministic ranking is used.
 13. Deep Nmap runs only on `top-hosts.json` hosts.
 14. Nuclei runs only on top-host HTTP/HTTPS URLs.

@@ -13,13 +13,18 @@ attack_surface_latest.html
 *.jsonl
 *.html
 !attack_surface_latest.html
+*.xml
+*.nmap
+*.gnmap
 *.png
 !example.png
 *.jpeg
+*.jpg
 *.svg
 *.md
 !README.md
 !AGENTS.md
+!notes/*.md
 !docs/*.md
 !docs/workflows/**/AGENTS.md
 !docs/workflows/**/SKILL.md
@@ -27,6 +32,10 @@ attack_surface_latest.html
 
 # Logs and runtime data
 runtime/*
+logs/
+cache/
+tmp/
+temp/
 !runtime/cache/.gitkeep
 !runtime/logs/.gitkeep
 !runtime/output/.gitkeep

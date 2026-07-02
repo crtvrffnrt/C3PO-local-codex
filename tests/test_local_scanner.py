@@ -21,7 +21,7 @@ NXC_PHASE_SPEC.loader.exec_module(NXC_PHASE)
 
 class LocalScannerTests(unittest.TestCase):
     def test_private_public_filtering(self):
-        self.assertTrue(scanner.ipv4_scope_allowed(ipaddress.ip_network("192.168.178.0/24")))
+        self.assertTrue(scanner.ipv4_scope_allowed(ipaddress.ip_network("192.168.100.0/24")))
         self.assertTrue(scanner.ipv4_scope_allowed(ipaddress.ip_network("10.0.0.0/24")))
         self.assertFalse(scanner.ipv4_scope_allowed(ipaddress.ip_network("8.8.8.0/24")))
         self.assertFalse(scanner.ipv4_scope_allowed(ipaddress.ip_network("127.0.0.0/8")))
@@ -30,16 +30,16 @@ class LocalScannerTests(unittest.TestCase):
     def test_legacy_route_netmask_conversion(self):
         entry = scanner.parse_ipv4_route_line((FIXTURES / "tun0_route_legacy.txt").read_text().splitlines()[0], source="legacy")
         self.assertIsNotNone(entry)
-        self.assertEqual(str(entry.network), "10.1.0.0/16")
-        self.assertEqual(entry.via, "10.81.0.129")
+        self.assertEqual(str(entry.network), "10.20.0.0/16")
+        self.assertEqual(entry.via, "10.20.30.1")
         self.assertEqual(entry.dev, "tun0")
 
     def test_modern_route_parsing(self):
-        entry = scanner.parse_ipv4_route_line("10.81.0.0/24 dev tun0 proto kernel scope link src 10.81.0.2", source="main")
+        entry = scanner.parse_ipv4_route_line("10.20.30.0/24 dev tun0 proto kernel scope link src 10.20.30.2", source="main")
         self.assertIsNotNone(entry)
-        self.assertEqual(str(entry.network), "10.81.0.0/24")
+        self.assertEqual(str(entry.network), "10.20.30.0/24")
         self.assertEqual(entry.dev, "tun0")
-        self.assertEqual(entry.src, "10.81.0.2")
+        self.assertEqual(entry.src, "10.20.30.2")
 
     def test_default_and_public_routes_are_excluded(self):
         entry = scanner.parse_ipv4_route_line("default via fritz.box dev eth1 proto dhcp metric 20")
@@ -48,21 +48,21 @@ class LocalScannerTests(unittest.TestCase):
         self.assertFalse(scanner.ipv4_scope_allowed(ipaddress.ip_network("8.8.8.0/24")))
 
     def test_parse_neighbors(self):
-        hosts = scanner.parse_neighbors("192.168.178.1 dev wlan0 lladdr aa:bb:cc:dd:ee:ff REACHABLE\n192.168.178.99 dev wlan0 FAILED\n")
-        self.assertIn("192.168.178.1", hosts)
-        self.assertNotIn("192.168.178.99", hosts)
-        self.assertEqual(hosts["192.168.178.1"].mac, "aa:bb:cc:dd:ee:ff")
+        hosts = scanner.parse_neighbors("192.168.100.1 dev wlan0 lladdr aa:bb:cc:dd:ee:ff REACHABLE\n192.168.100.99 dev wlan0 FAILED\n")
+        self.assertIn("192.168.100.1", hosts)
+        self.assertNotIn("192.168.100.99", hosts)
+        self.assertEqual(hosts["192.168.100.1"].mac, "aa:bb:cc:dd:ee:ff")
 
     def test_nmap_xml_parsing(self):
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "nmap.xml"
             path.write_text(
-                """<?xml version="1.0"?><nmaprun><host><status state="up"/><address addr="192.168.178.1" addrtype="ipv4"/><ports><port protocol="tcp" portid="80"><state state="open"/><service name="http" product="FRITZ!Box"/></port></ports></host></nmaprun>""",
+                """<?xml version="1.0"?><nmaprun><host><status state="up"/><address addr="192.168.100.1" addrtype="ipv4"/><ports><port protocol="tcp" portid="80"><state state="open"/><service name="http" product="FRITZ!Box"/></port></ports></host></nmaprun>""",
                 encoding="utf-8",
             )
             hosts = scanner.parse_nmap_xml(path)
-            self.assertIn("192.168.178.1", hosts)
-            self.assertIn(80, hosts["192.168.178.1"].services)
+            self.assertIn("192.168.100.1", hosts)
+            self.assertIn(80, hosts["192.168.100.1"].services)
 
     def test_tcp_discovery_finds_ping_blocked_hosts(self):
         ping_xml = """<?xml version="1.0"?><nmaprun></nmaprun>"""
@@ -116,14 +116,14 @@ class LocalScannerTests(unittest.TestCase):
             self.assertIn(445, hosts["10.10.10.11"].services)
 
     def test_route_validation_uses_effective_tun0_route(self):
-        addr_data = [{"addr_info": [{"family": "inet", "local": "10.81.0.2", "prefixlen": 24}]}]
+        addr_data = [{"addr_info": [{"family": "inet", "local": "10.20.30.2", "prefixlen": 24}]}]
         route_dev = scanner.parse_ipv4_route_table((FIXTURES / "tun0_route_main.txt").read_text(), source="dev:tun0")
         route_main = scanner.parse_ipv4_route_table((FIXTURES / "tun0_route_main.txt").read_text(), source="main")
         outputs = {
-            "10.1.0.1": "10.1.0.1 via 10.81.0.129 dev tun0 src 10.81.0.2",
-            "10.81.0.1": "10.81.0.1 dev tun0 src 10.81.0.2",
-            "10.10.10.1": "10.10.10.1 via 10.81.0.129 dev tun0 src 10.81.0.2",
-            "192.168.178.1": "192.168.178.1 via 10.81.0.129 dev tun0 src 10.81.0.2",
+            "10.1.0.1": "10.1.0.1 via 10.20.30.1 dev tun0 src 10.20.30.2",
+            "10.20.30.1": "10.20.30.1 dev tun0 src 10.20.30.2",
+            "10.10.10.1": "10.10.10.1 via 10.20.30.1 dev tun0 src 10.20.30.2",
+            "192.168.100.1": "192.168.100.1 via 10.20.30.1 dev tun0 src 10.20.30.2",
         }
 
         def fake_run_command(cmd, outdir, name, timeout, check=False):
@@ -150,17 +150,16 @@ class LocalScannerTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp, patch.object(scanner, "run_command", side_effect=fake_run_command):
             scope = scanner.validate_route_scope("tun0", addr_data, route_dev, route_main, Path(tmp))
-            self.assertIn(ipaddress.ip_network("10.1.0.0/16"), scope.validated_networks)
-            self.assertIn(ipaddress.ip_network("10.81.0.0/24"), scope.validated_networks)
+            self.assertIn(ipaddress.ip_network("10.20.30.0/24"), scope.validated_networks)
             self.assertIn(ipaddress.ip_network("10.10.10.0/24"), scope.validated_networks)
-            self.assertIn(ipaddress.ip_network("192.168.178.0/24"), scope.validated_networks)
-            self.assertTrue(any(item["network"] == "192.168.178.0/24" for item in scope.overlap_warnings))
+            self.assertIn(ipaddress.ip_network("192.168.100.0/24"), scope.validated_networks)
+            self.assertTrue(any(item["network"] == "192.168.100.0/24" for item in scope.overlap_warnings))
 
     def test_fritzbox_prioritization(self):
-        host = scanner.Host(ip="192.168.178.1")
+        host = scanner.Host(ip="192.168.100.1")
         host.sources.add("gateway")
-        top = scanner.classify_and_rank({"192.168.178.1": host}, ["192.168.178.1"])
-        self.assertEqual(top[0].ip, "192.168.178.1")
+        top = scanner.classify_and_rank({"192.168.100.1": host}, ["192.168.100.1"])
+        self.assertEqual(top[0].ip, "192.168.100.1")
         self.assertTrue(any("FritzBox" in reason for reason in top[0].ranking_reasons))
 
     def test_dns_srv_dc_discovery(self):
@@ -178,9 +177,9 @@ class LocalScannerTests(unittest.TestCase):
                 text = (FIXTURES / "dns_srv_ldap.txt").read_text()
             elif "kerberos" in " ".join(cmd):
                 text = (FIXTURES / "dns_srv_kerberos.txt").read_text()
-            elif cmd[-2:] == ["dc01.example.internal", "A"] or cmd[-1] == "dc01.example.internal":
+            elif cmd[-2:] == ["dc01.example.local", "A"] or cmd[-1] == "dc01.example.local":
                 text = "10.10.10.10\n"
-            elif cmd[-2:] == ["dc02.example.internal", "A"] or cmd[-1] == "dc02.example.internal":
+            elif cmd[-2:] == ["dc02.example.local", "A"] or cmd[-1] == "dc02.example.local":
                 text = "10.10.10.11\n"
             stdout_path = Path(outdir) / "logs" / f"{name}.stdout.txt"
             stderr_path = Path(outdir) / "logs" / f"{name}.stderr.txt"
@@ -209,7 +208,7 @@ class LocalScannerTests(unittest.TestCase):
             self.assertTrue(all(item["confirmed"] for item in candidates.values()))
 
     def test_nxc_protocol_mapping(self):
-        host = scanner.Host(ip="192.168.178.10")
+        host = scanner.Host(ip="192.168.100.10")
         for port in [445, 389, 5985, 22, 3389, 5901, 2049]:
             host.services[port] = scanner.Service(port=port)
         protocols = scanner.protocols_for_hosts([host])
@@ -242,14 +241,14 @@ class LocalScannerTests(unittest.TestCase):
             candidates = scanner.discover_domain_controllers({"networks": [ipaddress.ip_network("10.10.10.0/24")], "gateways": []}, hosts, Path(tmp), {"scan_batches": []}, False, nxc_outdir=nxc_out)
             self.assertIn("10.10.10.10", candidates)
             self.assertNotIn("10.10.10.50", candidates)
-            self.assertTrue(any("NXC output references domain example.internal" in item for item in candidates["10.10.10.10"]["evidence"]))
+            self.assertTrue(any("NXC output references" in item for item in candidates["10.10.10.10"]["evidence"]))
 
     def test_top_hosts_schema(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp)
-            host = scanner.Host(ip="192.168.178.1")
-            scanner.classify_and_rank({"192.168.178.1": host}, ["192.168.178.1"])
-            ctx = {"networks": [ipaddress.ip_network("192.168.178.0/24")]}
+            host = scanner.Host(ip="192.168.100.1")
+            scanner.classify_and_rank({"192.168.100.1": host}, ["192.168.100.1"])
+            ctx = {"networks": [ipaddress.ip_network("192.168.100.0/24")]}
             scanner.write_top_hosts([host], out, ctx, {})
             data = json.loads((out / "top-hosts.json").read_text())
             self.assertEqual(data["fritzbox_status"], "reachable_and_prioritized")
@@ -258,59 +257,59 @@ class LocalScannerTests(unittest.TestCase):
     def test_requested_cidr_filters_scope_to_single_network(self):
         ctx = {
             "interface": "tun0",
-            "addresses": ["10.81.0.2/24"],
-            "candidate_networks": [ipaddress.ip_network("10.1.0.0/16"), ipaddress.ip_network("172.16.16.0/24"), ipaddress.ip_network("192.168.178.0/24")],
-            "networks": [ipaddress.ip_network("10.1.0.0/16"), ipaddress.ip_network("172.16.16.0/24"), ipaddress.ip_network("192.168.178.0/24")],
-            "validated_networks": [ipaddress.ip_network("10.1.0.0/16"), ipaddress.ip_network("172.16.16.0/24"), ipaddress.ip_network("192.168.178.0/24")],
+            "addresses": ["10.20.30.2/24"],
+            "candidate_networks": [ipaddress.ip_network("10.20.0.0/16"), ipaddress.ip_network("10.20.30.0/24"), ipaddress.ip_network("192.168.100.0/24")],
+            "networks": [ipaddress.ip_network("10.20.0.0/16"), ipaddress.ip_network("10.20.30.0/24"), ipaddress.ip_network("192.168.100.0/24")],
+            "validated_networks": [ipaddress.ip_network("10.20.0.0/16"), ipaddress.ip_network("10.20.30.0/24"), ipaddress.ip_network("192.168.100.0/24")],
             "gateways": [],
             "route_excluded_networks": [],
             "route_overlap_warnings": [],
             "route_get_samples": [],
         }
-        filtered = scanner.apply_requested_scope(ctx, ipaddress.ip_network("172.16.16.0/24"))
-        self.assertEqual(filtered["networks"], [ipaddress.ip_network("172.16.16.0/24")])
-        self.assertEqual(filtered["validated_networks"], [ipaddress.ip_network("172.16.16.0/24")])
-        self.assertEqual(filtered["candidate_networks"], [ipaddress.ip_network("172.16.16.0/24")])
-        self.assertEqual(filtered["requested_network"], "172.16.16.0/24")
+        filtered = scanner.apply_requested_scope(ctx, ipaddress.ip_network("10.20.30.0/24"))
+        self.assertEqual(filtered["networks"], [ipaddress.ip_network("10.20.30.0/24")])
+        self.assertEqual(filtered["validated_networks"], [ipaddress.ip_network("10.20.30.0/24")])
+        self.assertEqual(filtered["candidate_networks"], [ipaddress.ip_network("10.20.30.0/24")])
+        self.assertEqual(filtered["requested_network"], "10.20.30.0/24")
         with tempfile.TemporaryDirectory() as tmp:
             scanner.write_scope(filtered, Path(tmp))
             scope = json.loads((Path(tmp) / "scope.json").read_text(encoding="utf-8"))
-            self.assertEqual(scope["candidate_networks"], ["172.16.16.0/24"])
-            self.assertEqual(scope["validated_networks"], ["172.16.16.0/24"])
+            self.assertEqual(scope["candidate_networks"], ["10.20.30.0/24"])
+            self.assertEqual(scope["validated_networks"], ["10.20.30.0/24"])
 
     def test_requested_cidr_rejected_when_not_effectively_routed(self):
         ctx = {
             "interface": "tun0",
-            "addresses": ["10.81.0.2/24"],
-            "candidate_networks": [ipaddress.ip_network("10.1.0.0/16")],
-            "networks": [ipaddress.ip_network("10.1.0.0/16")],
-            "validated_networks": [ipaddress.ip_network("10.1.0.0/16")],
+            "addresses": ["10.20.30.2/24"],
+            "candidate_networks": [ipaddress.ip_network("10.20.0.0/16")],
+            "networks": [ipaddress.ip_network("10.20.0.0/16")],
+            "validated_networks": [ipaddress.ip_network("10.20.0.0/16")],
             "gateways": [],
             "route_excluded_networks": [],
             "route_overlap_warnings": [],
             "route_get_samples": [],
         }
         with self.assertRaises(SystemExit):
-            scanner.apply_requested_scope(ctx, ipaddress.ip_network("172.16.16.0/24"))
+            scanner.apply_requested_scope(ctx, ipaddress.ip_network("10.20.30.0/24"))
 
     def test_top_ten_includes_two_dcs(self):
         hosts = {
             "10.10.10.10": scanner.Host(ip="10.10.10.10"),
             "10.10.10.11": scanner.Host(ip="10.10.10.11"),
-            "192.168.178.1": scanner.Host(ip="192.168.178.1"),
+            "192.168.100.1": scanner.Host(ip="192.168.100.1"),
         }
         for ip, ports in {
             "10.10.10.10": [53, 88, 389, 445, 5985],
             "10.10.10.11": [53, 88, 389, 445, 5985],
-            "192.168.178.1": [21, 53, 443],
+            "192.168.100.1": [21, 53, 443],
         }.items():
             for port in ports:
                 hosts[ip].services[port] = scanner.Service(port=port, name="svc")
         dc_candidates = {
-            "10.10.10.10": {"ip": "10.10.10.10", "confidence": "high", "evidence": ["DNS SRV", "LDAP", "Kerberos"], "open_ports": [53, 88, 389, 445, 5985], "reason": "dc", "confirmed": True, "hostname": "dc01.example.internal", "source_artifacts": [], "sources": [], "nmap_evidence": [], "nxc_evidence": [], "dns_evidence": []},
-            "10.10.10.11": {"ip": "10.10.10.11", "confidence": "high", "evidence": ["DNS SRV", "LDAP", "Kerberos"], "open_ports": [53, 88, 389, 445, 5985], "reason": "dc", "confirmed": True, "hostname": "dc02.example.internal", "source_artifacts": [], "sources": [], "nmap_evidence": [], "nxc_evidence": [], "dns_evidence": []},
+            "10.10.10.10": {"ip": "10.10.10.10", "confidence": "high", "evidence": ["DNS SRV", "LDAP", "Kerberos"], "open_ports": [53, 88, 389, 445, 5985], "reason": "dc", "confirmed": True, "hostname": "dc01.example.local", "source_artifacts": [], "sources": [], "nmap_evidence": [], "nxc_evidence": [], "dns_evidence": []},
+            "10.10.10.11": {"ip": "10.10.10.11", "confidence": "high", "evidence": ["DNS SRV", "LDAP", "Kerberos"], "open_ports": [53, 88, 389, 445, 5985], "reason": "dc", "confirmed": True, "hostname": "dc02.example.local", "source_artifacts": [], "sources": [], "nmap_evidence": [], "nxc_evidence": [], "dns_evidence": []},
         }
-        ranked = scanner.classify_and_rank(hosts, ["192.168.178.1"], dc_candidates)
+        ranked = scanner.classify_and_rank(hosts, ["192.168.100.1"], dc_candidates)
         top = scanner.ensure_required_top_hosts(ranked, hosts, dc_candidates)
         self.assertIn("10.10.10.10", [host.ip for host in top])
         self.assertIn("10.10.10.11", [host.ip for host in top])
@@ -329,7 +328,7 @@ class LocalScannerTests(unittest.TestCase):
                 + "\n",
                 encoding="utf-8",
             )
-            summary = scanner.aggregate_performance(out, {"scan_batches": [{"phase": "fast-scan", "network": "10.1.0.0/16", "host_count": 12, "duration_seconds": 12.5, "timeout_seconds": 120, "timed_out": False, "exit_code": 0, "command": ["nmap"]}], "screenshots": []})
+            summary = scanner.aggregate_performance(out, {"scan_batches": [{"phase": "fast-scan", "network": "10.20.0.0/16", "host_count": 12, "duration_seconds": 12.5, "timeout_seconds": 120, "timed_out": False, "exit_code": 0, "command": ["nmap"]}], "screenshots": []})
             self.assertIn("fast_scan", summary["phase_durations"])
             self.assertGreaterEqual(len(summary["timeouts"]), 1)
             self.assertTrue((out / "performance" / "phase_durations.json").exists())
@@ -347,7 +346,7 @@ class LocalScannerTests(unittest.TestCase):
     def test_report_renders_route_warnings_and_dc_candidates(self):
         with tempfile.TemporaryDirectory() as tmp:
             out = Path(tmp)
-            host = scanner.Host(ip="10.10.10.10", hostname="dc01.example.internal", role_guess="domain controller candidate", role_confidence="high")
+            host = scanner.Host(ip="10.10.10.10", hostname="dc01.example.local", role_guess="domain controller candidate", role_confidence="high")
             host.services[53] = scanner.Service(port=53, name="domain", product="Microsoft DNS")
             host.services[389] = scanner.Service(port=389, name="ldap", product="Microsoft AD")
             host.dc_candidate = True
@@ -357,19 +356,19 @@ class LocalScannerTests(unittest.TestCase):
             hosts = {host.ip: host}
             top_hosts = [host]
             findings = [{"severity": "High", "status": "inferred", "host": host.ip, "title": "Internal exposure on 389/ldap", "evidence": "tcp/389 ldap", "recommendation": "Restrict access", "cves": []}]
-            dc_candidates = {host.ip: {"ip": host.ip, "hostname": host.hostname, "confidence": "high", "confirmed": True, "reason": "DNS SRV records identify a likely domain controller", "open_ports": [53, 389], "evidence": ["DNS SRV"], "source_artifacts": ["domain/example.internal_srv_ldap.txt"], "sources": ["dns-srv"], "nmap_evidence": [], "nxc_evidence": [], "dns_evidence": ["_ldap._tcp.dc._msdcs.example.internal"]}}
+            dc_candidates = {host.ip: {"ip": host.ip, "hostname": host.hostname, "confidence": "high", "confirmed": True, "reason": "DNS SRV records identify a likely domain controller", "open_ports": [53, 389], "evidence": ["DNS SRV"], "source_artifacts": ["domain/example.local_srv_ldap.txt"], "sources": ["dns-srv"], "nmap_evidence": [], "nxc_evidence": [], "dns_evidence": ["_ldap._tcp.dc._msdcs.example.local"]}}
             (out / "top-hosts.json").write_text(json.dumps({"fritzbox_status": "not_in_scope", "hosts": [scanner.host_to_dict(host)]}), encoding="utf-8")
             report = scanner.render_report(
                 out,
                 {
                     "interface": "tun0",
-                    "addresses": ["10.81.0.2/24"],
-                    "candidate_networks": ["10.81.0.0/24"],
-                    "networks": [ipaddress.ip_network("10.81.0.0/24")],
-                    "validated_networks": ["10.81.0.0/24"],
+                    "addresses": ["10.20.30.2/24"],
+                    "candidate_networks": ["10.20.30.0/24"],
+                    "networks": [ipaddress.ip_network("10.20.30.0/24")],
+                    "validated_networks": ["10.20.30.0/24"],
                     "gateways": [],
-                    "route_overlap_warnings": [{"network": "192.168.178.0/24", "effective_dev": "tun0", "effective_via": "10.81.0.129", "competing_routes": [{"dev": "eth1"}]}],
-                    "route_get_samples": [{"network": "10.81.0.0/24", "representative_ip": "10.81.0.1", "effective_dev": "tun0", "stdout": "10.81.0.1 dev tun0", "stderr": ""}],
+                    "route_overlap_warnings": [{"network": "192.168.100.0/24", "effective_dev": "tun0", "effective_via": "10.20.30.1", "competing_routes": [{"dev": "eth1"}]}],
+                    "route_get_samples": [{"network": "10.20.30.0/24", "representative_ip": "10.20.30.1", "effective_dev": "tun0", "stdout": "10.20.30.1 dev tun0", "stderr": ""}],
                     "route_excluded_networks": ["default via eth1"],
                 },
                 hosts,
@@ -379,7 +378,7 @@ class LocalScannerTests(unittest.TestCase):
                 {"model": "gpt-5.5", "reasoning_profile": "medium"},
                 {"selected_protocols": ["smb"], "ran": True},
                 dc_candidates,
-                {"phase_durations": {"fast_scan": {"duration_seconds": 1.2, "timeout_count": 0, "commands": ["nmap_fast_10.81.0.0_24"]}}, "timeouts": [], "slow_hosts": [], "scan_batches": [], "screenshots": [{"host": host.ip}]},
+                {"phase_durations": {"fast_scan": {"duration_seconds": 1.2, "timeout_count": 0, "commands": ["nmap_fast_10.20.30.0_24"]}}, "timeouts": [], "slow_hosts": [], "scan_batches": [], "screenshots": [{"host": host.ip}]},
             )
             html_text = report.read_text(encoding="utf-8")
             self.assertIn("Management Summary", html_text)

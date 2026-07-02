@@ -29,7 +29,7 @@ Options:
 Examples:
   ./run.sh -i eth0
   ./run.sh -i wlan0
-  ./run.sh -i tun0 --cidr 172.16.16.0/24
+  ./run.sh -i tun0 --cidr 10.20.30.0/24
 EOF
 }
 

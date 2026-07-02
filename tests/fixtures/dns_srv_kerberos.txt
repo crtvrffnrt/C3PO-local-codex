@@ -1,2 +1,2 @@
-0 100 88 dc01.example.internal.
-0 100 88 dc02.example.internal.
+0 100 88 dc01.example.local.
+0 100 88 dc02.example.local.

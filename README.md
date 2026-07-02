@@ -42,7 +42,7 @@ Primary path:
 To narrow scope to one routed subnet while still using the selected interface:
 
 ```bash
-./run.sh -i tun0 --cidr 172.16.16.0/24
+./run.sh -i tun0 --cidr 10.20.30.0/24
 ```
 
 The wrapper displays an authorization banner, requires explicit acknowledgement, and then asks for a Codex model/reasoning profile:
@@ -59,7 +59,7 @@ For automation:
 ```bash
 ./run.sh -i wlan0 --authorized
 ./run.sh -i wlan0 --authorized --dry-run
-./run.sh -i tun0 --cidr 172.16.16.0/24 --authorized --dry-run
+./run.sh -i tun0 --cidr 10.20.30.0/24 --authorized --dry-run
 ```
 
 This installed Codex CLI supports `--model` but does not expose a documented reasoning-effort flag. C3PO records the selected reasoning profile and includes it in Codex prompts; it does not guess unsupported flags.
@@ -93,7 +93,7 @@ No Shodan, Docker lab targets, public DNS APIs, Cloudflare services, external MC
 8. Discover live hosts through neighbor/ARP data, gateways, optional `arp-scan`, bounded per-subnet `nmap -sn`, and a small TCP fallback scan for ping-blocked hosts on small subnets.
 9. Write `live-hosts.txt` and `live-hosts.json`.
 10. Run fast bounded Nmap against live hosts in per-subnet batches using explicit infrastructure ports.
-11. Discover and prioritize `example.internal` domain-controller candidates from DNS SRV, Nmap, and NXC evidence.
+11. Discover and prioritize `example.local` domain-controller candidates from DNS SRV, Nmap, and NXC evidence.
 12. Ask Codex to interpret structured discovery evidence when available; fall back to deterministic scoring if Codex fails.
 13. Run deep Nmap only against selected top hosts.
 14. Run Nuclei only against HTTP/HTTPS services on selected top hosts and always write a Nuclei artifact, even when no web targets are selected.

@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parent.parent
 RUN_ROOT = ROOT / "runs"
 MAX_ACTIVE_IPV4_ADDRESSES = 65536
 MAX_TOP_HOSTS = 10
-FRITZBOX_IP = "192.168.178.1"
+FRITZBOX_IP = "192.168.100.1"
 FAST_PORTS = "21,22,25,53,80,88,110,111,135,139,143,389,443,445,465,587,636,993,995,1433,1521,2049,2375,2376,3000,3306,3389,5000,5432,5601,5900-5909,5985,5986,6379,8000,8080,8443,9200,9300"
 DISCOVERY_TCP_PORTS = "53,88,135,139,389,445,464,593,636,3268,3269,5985"
 SAFE_NUCLEI_TAGS = "exposure,misconfig,panel,tech,ssl,tls,http"
@@ -910,7 +910,7 @@ def discover_domain_controllers(
     domain_dir = outdir / "domain"
     domain_dir.mkdir(parents=True, exist_ok=True)
     dc_candidates: dict[str, dict[str, Any]] = {}
-    domain_name = "example.internal"
+    domain_name = "example.local"
     dns_config_parts: list[str] = []
     if command_exists("resolvectl"):
         for cmd_name, cmd in [
@@ -933,7 +933,7 @@ def discover_domain_controllers(
     if not dry_run and command_exists("dig"):
         for label in ("ldap", "kerberos"):
             query = DC_SRV_RECORDS[0].format(domain=domain_name) if label == "ldap" else DC_SRV_RECORDS[1].format(domain=domain_name)
-            query_name = f"example.internal_srv_{label}"
+            query_name = f"example.local_srv_{label}"
             query_cmd = ["dig", "+short", query, "SRV"]
             if dns_servers:
                 query_cmd = ["dig", "+short", f"@{dns_servers[0]}", query, "SRV"]
@@ -977,7 +977,7 @@ def discover_domain_controllers(
     elif not dry_run and command_exists("nslookup"):
         for label in ("ldap", "kerberos"):
             query = DC_SRV_RECORDS[0].format(domain=domain_name) if label == "ldap" else DC_SRV_RECORDS[1].format(domain=domain_name)
-            query_name = f"example.internal_srv_{label}"
+            query_name = f"example.local_srv_{label}"
             nslookup_cmd = ["nslookup", "-type=SRV", query]
             if dns_servers:
                 nslookup_cmd = ["nslookup", "-type=SRV", query, dns_servers[0]]
@@ -1107,7 +1107,7 @@ def classify_and_rank(hosts: dict[str, Host], gateways: list[str], dc_candidates
             host.dc_candidate = True
             host.dc_confidence = str(candidate.get("confidence", "medium"))
             host.dc_evidence = list(dict.fromkeys(host.dc_evidence + candidate.get("evidence", [])))
-            dc_reason = f"Domain controller candidate for example.internal ({host.dc_confidence})"
+            dc_reason = f"Domain controller candidate for example.local ({host.dc_confidence})"
             add_reason(host, 70 if host.dc_confidence == "high" else 55, dc_reason)
             add_reason(host, 20, "DC evidence: " + "; ".join(candidate.get("evidence", [])[:3]))
             host.role_guess, host.role_confidence = "domain controller candidate", host.dc_confidence
@@ -1115,7 +1115,7 @@ def classify_and_rank(hosts: dict[str, Host], gateways: list[str], dc_candidates
             add_reason(host, 45, "Likely gateway/router/firewall: interface route points to this host")
             host.role_guess, host.role_confidence = "gateway/router/firewall", "high"
         if host.ip == FRITZBOX_IP:
-            add_reason(host, 60, "Likely FritzBox/router candidate at 192.168.178.1")
+            add_reason(host, 60, "Likely FritzBox/router candidate at 192.168.100.1")
             host.role_guess, host.role_confidence = "FritzBox/router candidate", "high"
         if len({53, 88, 389, 445} & ports) >= 3:
             add_reason(host, 45, "Likely identity infrastructure: DNS/Kerberos/LDAP/SMB indicators")
@@ -1149,7 +1149,7 @@ def codex_select_top_hosts(hosts: dict[str, Host], deterministic: list[Host], ou
     evidence = {
         "instruction": "Select up to 10 highest-priority local internal hosts for deeper safe assessment. Do not invent roles; mark inferred roles with confidence.",
         "reasoning_profile": reasoning,
-        "priority_rules": ["prioritize reachable 192.168.178.1 as likely FritzBox/router", "gateways", "DNS/DHCP/identity", "NAS/storage", "admin protocols", "databases", "web admin", "domain controllers for example.internal"],
+        "priority_rules": ["prioritize reachable 192.168.100.1 as likely FritzBox/router", "gateways", "DNS/DHCP/identity", "NAS/storage", "admin protocols", "databases", "web admin", "domain controllers for example.local"],
         "hosts": [host_to_dict(h) for h in deterministic],
     }
     prompt_path = prompts / "top-host-selection-prompt.json"
@@ -1240,7 +1240,7 @@ def write_top_hosts(top_hosts: list[Host], outdir: Path, ctx: dict[str, Any], dc
         "hosts": [host_to_dict(h) for h in top_hosts],
     }
     write_json_file(outdir / "top-hosts.json", data)
-    lines = [f"# Top Hosts", "", f"192.168.178.1 status: {status}", ""]
+    lines = [f"# Top Hosts", "", f"192.168.100.1 status: {status}", ""]
     if dc_candidates:
         lines.append("## Domain Controller Candidates")
         for item in dc_candidates.values():
@@ -1646,8 +1646,8 @@ def host_verification_commands(host: Host, dc_candidates: dict[str, dict[str, An
             commands.append({"label": label, "command": command, "timeout": timeout})
             seen.add(command)
     if host.ip in dc_candidates:
-        commands.append({"label": "Confirm AD SRV records", "command": "dig _ldap._tcp.dc._msdcs.example.internal SRV", "timeout": "5s"})
-        commands.append({"label": "Confirm Kerberos SRV records", "command": "dig _kerberos._tcp.example.internal SRV", "timeout": "5s"})
+        commands.append({"label": "Confirm AD SRV records", "command": "dig _ldap._tcp.dc._msdcs.example.local SRV", "timeout": "5s"})
+        commands.append({"label": "Confirm Kerberos SRV records", "command": "dig _kerberos._tcp.example.local SRV", "timeout": "5s"})
     return commands[:8]
 
 
@@ -1775,7 +1775,7 @@ html[data-theme="dark"] {{color-scheme: dark;--bg:#0A0A0A;--bg-subtle:#111111;--
 *{{box-sizing:border-box}}html{{scroll-behavior:smooth}}body{{margin:0;background:radial-gradient(circle at 20% -10%,var(--ui),transparent 34rem),linear-gradient(180deg,var(--bg),var(--bg-subtle));color:var(--text);font:14px/1.6 var(--font-sans)}}header{{position:sticky;top:0;z-index:10;background:var(--header-bg);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}}.header-inner,main{{max-width:1000px;margin:0 auto;padding:2rem 1.5rem}}.header-inner{{display:flex;align-items:center;justify-content:space-between;gap:1rem;padding-top:1rem;padding-bottom:1rem}}h1,h2,h3,.host-title,.summary-tile strong,.button{{font-family:var(--font-header)}}h1{{margin:0;font-size:clamp(1.6rem,4vw,2.7rem);letter-spacing:-.04em;color:var(--ink)}}h2{{margin:0 0 1rem;font-size:1.35rem;letter-spacing:-.025em}}h3{{margin:1.4rem 0 .7rem;font-size:1rem}}p{{margin:.4rem 0 0}}main{{display:grid;gap:1rem}}section,.host-card,.panel,.summary-tile{{background:var(--surface);border:1px solid var(--border);border-radius:8px}}section{{padding:1.25rem;box-shadow:0 18px 50px rgba(0,0,0,.04)}}.summary-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem}}.summary-tile{{padding:1.25rem;transition:border-color .2s ease-in-out;cursor:pointer;text-align:left;color:var(--text)}}.summary-tile:hover,.summary-tile.active{{border-color:var(--border-hover)}}.summary-tile strong{{display:block;font-size:2rem;line-height:1.1;margin-top:.35rem}}.summary-tile.static{{cursor:default}}.muted{{color:var(--muted)}}.mono,code,pre{{font-family:var(--font-mono)}}.button,.theme-toggle,.search-box button{{background:var(--accent);color:var(--on-accent);border:none;border-radius:6px;padding:.5rem 1.2rem;font-family:var(--font-header);font-weight:600;cursor:pointer;transition:opacity .2s}}.button:hover,.theme-toggle:hover,.search-box button:hover{{opacity:.78}}.search-box{{display:flex;align-items:center;border:1px solid var(--border);border-radius:8px;background:var(--surface);padding:.25rem .25rem .25rem 1rem;margin-bottom:1rem}}.search-box input{{border:none;outline:none;background:transparent;color:var(--text);font-family:var(--font-sans);width:100%;min-width:0}}table{{width:100%;border-collapse:collapse}}th,td{{border-bottom:1px solid var(--line);padding:1rem .75rem;text-align:left;vertical-align:top}}th{{font-family:var(--font-header);font-weight:600;color:var(--muted);font-size:.78rem;text-transform:uppercase;letter-spacing:.06em}}tr:hover{{background-color:var(--row-hover)}}code{{display:block;white-space:pre-wrap;background:var(--bg-subtle);border:1px solid var(--line);border-radius:6px;padding:.65rem;overflow-x:auto;color:var(--text);font-size:13.5px}}pre{{margin:0;white-space:pre-wrap;background:var(--bg-subtle);border:1px solid var(--line);border-radius:6px;padding:1rem;overflow-x:auto;color:var(--text);font-size:13.5px}}details summary{{cursor:pointer;font-family:var(--font-header);font-weight:600;color:var(--ink)}}details pre{{margin-top:.65rem}}.badge{{display:inline-flex;align-items:center;justify-content:center;padding:2px 8px;border-radius:4px;font-family:var(--font-sans);font-size:12px;font-weight:600;text-transform:uppercase;background:var(--ui);border:1px solid var(--border);color:var(--text)}}.severity-critical{{background:var(--sev-crit-bg);border-color:var(--sev-crit-bd);color:var(--sev-crit-fg)}}.severity-high{{background:var(--sev-high-bg);border-color:var(--sev-high-bd);color:var(--sev-high-fg)}}.severity-medium{{background:var(--sev-med-bg);border-color:var(--sev-med-bd);color:var(--sev-med-fg)}}.severity-low{{background:var(--sev-low-bg);border-color:var(--sev-low-bd);color:var(--sev-low-fg)}}.severity-info{{background:var(--ui);border-color:var(--border);color:var(--muted)}}.dc{{background:var(--glass-bg);border-color:var(--glass-border)}}.pill{{display:inline-flex;padding:4px 8px;border-radius:999px;background:var(--ui);border:1px solid var(--border);margin:0 6px 6px 0;font-family:var(--font-mono);font-size:12px}}.section-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:1rem}}.panel{{padding:1rem;background:var(--glass-bg);border-color:var(--glass-border)}}.note{{background:var(--glass-bg);border:1px solid var(--glass-border);border-radius:8px;padding:1rem}}.stack{{display:grid;gap:1rem}}.host-card{{padding:1.25rem;transition:border-color .2s ease-in-out}}.host-card:hover{{border-color:var(--border-hover)}}.host-head{{display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;margin-bottom:1rem}}.host-title{{font-size:1.25rem;font-weight:700;letter-spacing:-.025em}}.badges{{display:flex;gap:.5rem;flex-wrap:wrap;justify-content:flex-end}}.host-grid{{display:grid;grid-template-columns:1.1fr .9fr 1fr 1fr;gap:1rem}}.shot img{{width:100%;border-radius:8px;border:1px solid var(--border);background:var(--bg-subtle);aspect-ratio:16/10;object-fit:cover}}.findings ul,.commands ul{{margin:.6rem 0 0 1rem;padding:0}}.findings li,.commands li{{margin:0 0 .6rem}}.table-wrap{{overflow-x:auto}}@media (max-width:820px){{.header-inner{{align-items:flex-start;flex-direction:column}}.host-grid{{grid-template-columns:1fr}}th,td{{padding:.8rem .55rem}}}}
 </style></head><body><header><div class="header-inner"><div><h1>C3PO Local Scanner Report</h1><p class="muted">Authorized internal scan via <span class="mono">{esc(ctx['interface'])}</span> - run <span class="mono">{esc(outdir.name)}</span></p></div><button class="theme-toggle" id="themeToggle" type="button">Toggle theme</button></div></header><main>
 <section><h2>Management Summary</h2><div class="summary-grid"><button class="summary-tile" type="button" data-filter="critical"><span class="muted">Critical</span><strong>{severity_counts['Critical']}</strong></button><button class="summary-tile" type="button" data-filter="high"><span class="muted">High</span><strong>{severity_counts['High']}</strong></button><button class="summary-tile" type="button" data-filter="medium"><span class="muted">Medium</span><strong>{severity_counts['Medium']}</strong></button><button class="summary-tile" type="button" data-filter="low"><span class="muted">Low</span><strong>{severity_counts['Low']}</strong></button><div class="summary-tile static"><span class="muted">Domain controllers in top 10</span><strong>{'yes' if both_dc_in_top else 'no'}</strong></div><div class="summary-tile static"><span class="muted">Route warnings</span><strong>{len(overlap_warnings)}</strong></div><div class="summary-tile static"><span class="muted">Runtime</span><strong>{total_runtime}s</strong></div></div><div class="note" style="margin-top:1rem"><strong>Priority findings</strong><ul>{management_bullets}</ul></div></section>
-<section><h2>Routing and Scope</h2><div class="section-grid"><div class="panel"><strong>Selected interface</strong><div>{esc(ctx['interface'])}</div><div class="muted">Codex profile: {esc(profile)}</div></div><div class="panel"><strong>Validated tun0 networks</strong><div>{validated_network_pills}</div></div><div class="panel"><strong>Excluded routes</strong><pre>{esc('; '.join(ctx.get('route_excluded_networks', [])) or 'none')}</pre></div><div class="panel"><strong>Overlap warnings</strong><pre>{esc('; '.join(item.get('network', '') + ' -> ' + (item.get('effective_dev') or 'unknown') for item in overlap_warnings) or 'none')}</pre></div></div><h3>Route validation evidence</h3><table><tr><th>Network</th><th>Representative IP</th><th>Effective dev</th><th>Route output</th></tr>{route_sample_html}</table><h3>Overlap details</h3><table><tr><th>Network</th><th>Effective dev</th><th>Via</th><th>Competing devs</th></tr>{route_warning_html}</table><h3>Domain Controller Candidates</h3><table><tr><th>IP</th><th>Hostname</th><th>Confidence</th><th>Confirmed</th><th>Reason</th><th>Ports</th><th>Evidence</th></tr>{dc_rows}</table><p class="muted">Detected DNS domain: example.internal. Both DCs included in top 10: { 'yes' if both_dc_in_top else 'no' }.</p></section>
+<section><h2>Routing and Scope</h2><div class="section-grid"><div class="panel"><strong>Selected interface</strong><div>{esc(ctx['interface'])}</div><div class="muted">Codex profile: {esc(profile)}</div></div><div class="panel"><strong>Validated tun0 networks</strong><div>{validated_network_pills}</div></div><div class="panel"><strong>Excluded routes</strong><pre>{esc('; '.join(ctx.get('route_excluded_networks', [])) or 'none')}</pre></div><div class="panel"><strong>Overlap warnings</strong><pre>{esc('; '.join(item.get('network', '') + ' -> ' + (item.get('effective_dev') or 'unknown') for item in overlap_warnings) or 'none')}</pre></div></div><h3>Route validation evidence</h3><table><tr><th>Network</th><th>Representative IP</th><th>Effective dev</th><th>Route output</th></tr>{route_sample_html}</table><h3>Overlap details</h3><table><tr><th>Network</th><th>Effective dev</th><th>Via</th><th>Competing devs</th></tr>{route_warning_html}</table><h3>Domain Controller Candidates</h3><table><tr><th>IP</th><th>Hostname</th><th>Confidence</th><th>Confirmed</th><th>Reason</th><th>Ports</th><th>Evidence</th></tr>{dc_rows}</table><p class="muted">Detected DNS domain: example.local. Both DCs included in top 10: { 'yes' if both_dc_in_top else 'no' }.</p></section>
 <section><h2>Tool Versions</h2><pre>{esc(json.dumps(deps, indent=2))}</pre></section>
 <section><h2>Top 10 Host Cards</h2><div class="stack">{host_cards or '<div class="muted">No top hosts available.</div>'}</div></section>
 <section><h2>Findings</h2><form class="search-box" id="findingSearch"><input id="findingQuery" type="search" placeholder="Search findings by host, service, evidence, or recommendation" autocomplete="off"><button type="submit">Search</button></form><div class="table-wrap"><table><thead><tr><th>Severity</th><th>Status</th><th>Host</th><th>Finding</th><th>Evidence</th><th>Recommendation</th></tr></thead><tbody id="findingsBody">{finding_rows or '<tr><td colspan="6" class="muted">No findings generated.</td></tr>'}</tbody></table></div></section>

@@ -43,7 +43,7 @@ Only private IPv4 scope derived from the selected interface is eligible. Default
 
 ## Prioritization
 
-Risk scoring uses local evidence: gateway/router indicators, `192.168.178.1` FritzBox/router status, DNS/identity/storage/admin/database/web exposure, legacy protocols, service count, and local tool findings. Open ports are treated as exposure, not vulnerability proof.
+Risk scoring uses local evidence: gateway/router indicators, `192.168.100.1` FritzBox/router status, DNS/identity/storage/admin/database/web exposure, legacy protocols, service count, and local tool findings. Open ports are treated as exposure, not vulnerability proof.
 
 ## NXC Safety
 

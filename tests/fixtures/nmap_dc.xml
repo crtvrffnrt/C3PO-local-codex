@@ -3,7 +3,7 @@
   <host>
     <status state="up"/>
     <address addr="10.10.10.10" addrtype="ipv4"/>
-    <hostnames><hostname name="dc01.example.internal" type="PTR"/></hostnames>
+    <hostnames><hostname name="dc01.example.local" type="PTR"/></hostnames>
     <ports>
       <port protocol="tcp" portid="53"><state state="open"/><service name="domain" product="Microsoft DNS"/></port>
       <port protocol="tcp" portid="88"><state state="open"/><service name="kerberos-sec" product="Microsoft Kerberos"/></port>
