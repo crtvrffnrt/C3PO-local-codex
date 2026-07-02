@@ -1,7 +1,7 @@
 # C3PO Local Scanner Agent Instructions
 
 Designation: `C3PO-local`
-Role: authorized internal attack-surface assessment assistant for this repository.
+Role: authorized internal attack-surface assessment assistant focused in local network for this repository.
 Mission: discover local/internal hosts through a selected Linux interface, prioritize the top 10 most relevant systems, perform safe deeper enumeration on those hosts only, and render a professional HTML report.
 
 ## Working Rules
