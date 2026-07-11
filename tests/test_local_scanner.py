@@ -11,6 +11,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from pipeline import local_scanner as scanner
+from pipeline import codex_catalog
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -21,6 +22,37 @@ NXC_PHASE_SPEC.loader.exec_module(NXC_PHASE)
 
 
 class LocalScannerTests(unittest.TestCase):
+    def test_codex_catalog_dynamic_validation_and_future_efforts(self):
+        catalog = {"models": [
+            {"slug": "model-one", "display_name": "Model One", "default_reasoning_level": "ultra", "supported_reasoning_levels": [{"effort": "ultra"}, {"effort": "max"}]},
+            {"slug": "model-two", "display_name": "", "supported_reasoning_levels": [{"effort": "low"}]},
+        ]}
+        selected, error = codex_catalog.validate(catalog, "model-one", "max")
+        self.assertFalse(error)
+        self.assertEqual(selected["reasoning"], "max")
+        selected, error = codex_catalog.validate(catalog, "model-one", "medium")
+        self.assertIsNone(selected)
+        self.assertIn("ultra, max", error)
+
+    def test_codex_catalog_rejects_invalid_model(self):
+        selected, error = codex_catalog.validate({"models": [{"slug": "known"}]}, "unknown", "")
+        self.assertIsNone(selected)
+        self.assertIn("Available slugs: known", error)
+
+    def test_codex_catalog_loads_once_and_rejects_bad_json(self):
+        result = subprocess.CompletedProcess(["codex"], 0, stdout="not-json", stderr="")
+        with patch.object(codex_catalog.shutil, "which", return_value="/mock/codex"), patch.object(codex_catalog.subprocess, "run", return_value=result) as run:
+            catalog, error = codex_catalog.load_catalog()
+            self.assertIsNone(catalog)
+            self.assertIn("malformed JSON", error)
+            run.assert_called_once()
+
+    def test_codex_selector_stdout_is_json_only(self):
+        catalog = {"models": [{"slug": "model-one", "display_name": "Model One", "default_reasoning_level": "low", "supported_reasoning_levels": [{"effort": "low"}]}]}
+        with patch.object(codex_catalog.sys, "stdin", __import__("io").StringIO("1\n\n")), patch.object(codex_catalog.sys, "stdout", __import__("io").StringIO()):
+            selected = codex_catalog.choose(catalog)
+            self.assertEqual(selected["model"], "model-one")
+
     def test_private_public_filtering(self):
         self.assertTrue(scanner.ipv4_scope_allowed(ipaddress.ip_network("192.168.100.0/24")))
         self.assertTrue(scanner.ipv4_scope_allowed(ipaddress.ip_network("10.0.0.0/24")))
@@ -455,7 +487,7 @@ class LocalScannerTests(unittest.TestCase):
                 top_hosts,
                 findings,
                 {"nmap": {"installed": True}, "nuclei": {"installed": True}},
-                {"model": "gpt-5.5", "reasoning_profile": "medium"},
+                {"model": "catalog-model", "reasoning_profile": "catalog-effort", "selected": True, "succeeded": True},
                 {"selected_protocols": ["smb"], "ran": True},
                 dc_candidates,
                 {"phase_durations": {"fast_scan": {"duration_seconds": 1.2, "timeout_count": 0, "commands": ["nmap_fast_10.20.30.0_24"]}}, "timeouts": [], "slow_hosts": [], "scan_batches": [], "screenshots": [{"host": host.ip}]},

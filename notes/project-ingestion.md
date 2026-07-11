@@ -68,7 +68,7 @@ Current scan flow in `pipeline/local_scanner.py`:
 
 ## Codex Model Selection
 
-- `bin/run.sh` prompts for one of six model/reasoning profiles.
+- `bin/run.sh` dynamically loads the installed Codex model catalog and prompts for a model, then that model's supported reasoning effort.
 - The scanner records the selected model and reasoning profile in `scan-data.json`.
 - If the installed Codex CLI is unavailable or fails, deterministic ranking is used as fallback.
 
@@ -104,4 +104,3 @@ Current scan flow in `pipeline/local_scanner.py`:
 - Nuclei and NXC are bounded, but their results are not yet summarized as partial or timed-out per phase in the report.
 - Domain controllers are not currently discovered as a first-class target class.
 - The report does not yet include the requested one-page management summary or per-host card layout.
-

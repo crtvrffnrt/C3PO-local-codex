@@ -44,14 +44,7 @@ To narrow scope to one routed subnet while still using the selected interface:
 ./run.sh -i tun0 --cidr 10.20.30.0/24
 ```
 
-The wrapper displays an authorization banner, requires explicit acknowledgement, and then asks for a Codex model/reasoning profile:
-
-- GPT-5.5 High
-- GPT-5.5 Medium
-- GPT-5.5 Low
-- GPT-5.4 Mini High
-- GPT-5.4 Mini Medium
-- GPT-5.4 Mini Low
+The wrapper displays an authorization banner, requires explicit acknowledgement, and dynamically loads models from `codex debug models`. It presents a model menu first, then only the reasoning efforts supported by that model, marking its catalog-provided default. Availability depends on the installed Codex CLI version, account, rollout, and local authentication. Choose `0` to continue with deterministic prioritization.
 
 For automation:
 
@@ -61,7 +54,22 @@ For automation:
 ./run.sh -i tun0 --cidr 10.20.30.0/24 --authorized --dry-run
 ```
 
-This installed Codex CLI supports `--model` but does not expose a documented reasoning-effort flag. C3PO records the selected reasoning profile and includes it in Codex prompts; it does not guess unsupported flags.
+Explicit options override interactive selection:
+
+```bash
+./run.sh -i wlan0 --authorized --codex-model <available-model-slug> --codex-reasoning <supported-effort>
+./run.sh -i wlan0 --authorized --no-codex
+```
+
+`CODEX_MODEL` and `CODEX_REASONING` are also accepted as environment overrides. Precedence is CLI options, then these environment variables, then interactive selection, then deterministic fallback. Authorized noninteractive runs do not prompt and use deterministic prioritization unless explicit values are supplied. If the installed CLI has no documented reasoning flag, the selected effort is prompt-level guidance and metadata only; C3PO never guesses an unsupported flag.
+
+Inspect the raw catalog with:
+
+```bash
+codex debug models
+codex debug models | jq -r '.models[].slug'
+codex debug models | jq -r '.models[] | "\(.slug): " + ((.supported_reasoning_levels // []) | map(.effort) | join(", "))'
+```
 
 ## Dependencies
 

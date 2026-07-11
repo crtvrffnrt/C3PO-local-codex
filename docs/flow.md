@@ -2,7 +2,7 @@
 
 1. Operator runs `./run.sh -i wlan0`.
 2. `bin/run.sh` displays the authorization banner and requires acknowledgement unless `--authorized` is supplied.
-3. The wrapper asks for the Codex model/reasoning profile and passes the selected model to the scanner when `codex` is installed.
+3. The wrapper loads `codex debug models` once, offers separate model and model-specific effort menus, and passes the selected values to the scanner. Missing or broken catalogs use deterministic prioritization.
 4. `pipeline/local_scanner.py` creates `runs/YYYYmmdd-HHMMSS/`.
 5. The scanner captures tool versions and derives safe local scope from the selected interface.
 6. The scanner writes `scope.json` and `scope.txt`.

@@ -24,6 +24,12 @@ for cmd in nmap nuclei nxc arp arp-scan codex chromium chromium-browser google-c
   fi
 done
 
+if command -v codex >/dev/null 2>&1; then
+  echo "[i] Codex model discovery is available at runtime via: codex debug models"
+else
+  echo "[i] Codex model discovery unavailable; deterministic prioritization remains available"
+fi
+
 if [ "$missing" -ne 0 ]; then
   exit 1
 fi

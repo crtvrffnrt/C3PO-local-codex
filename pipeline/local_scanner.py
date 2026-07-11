@@ -591,7 +591,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("-c", "--cidr", default="")
     parser.add_argument("--authorized", "--i-own-this-scope", action="store_true", dest="authorized")
     parser.add_argument("--codex-model", default="")
+    parser.add_argument("--codex-model-display", default="")
+    parser.add_argument("--codex-catalog-loaded", choices=["true", "false"], default="")
+    parser.add_argument("--codex-catalog-error", default="")
     parser.add_argument("--codex-reasoning", default="")
+    parser.add_argument("--no-codex", action="store_true")
+    parser.add_argument("--no-model-prompt", action="store_true")
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     return parser.parse_args()
@@ -1701,7 +1706,9 @@ def classify_and_rank(hosts: dict[str, Host], gateways: list[str], dc_candidates
     return sorted(hosts.values(), key=lambda h: (-h.score, -len(h.services), ip_sort_key(h.ip)))[:MAX_TOP_HOSTS]
 
 
-def codex_select_top_hosts(hosts: dict[str, Host], deterministic: list[Host], outdir: Path, model: str, reasoning: str, dc_candidates: dict[str, dict[str, Any]] | None = None) -> list[Host]:
+def codex_select_top_hosts(hosts: dict[str, Host], deterministic: list[Host], outdir: Path, model: str, reasoning: str, dc_candidates: dict[str, dict[str, Any]] | None = None, status: dict[str, Any] | None = None) -> list[Host]:
+    status = status if status is not None else {}
+    status.update({"selected": bool(model), "model": model, "reasoning_profile": reasoning, "invoked": False, "succeeded": False, "fallback_used": True, "fallback_reason": "Codex not selected" if not model else ""})
     prompts = outdir / "codex"
     prompts.mkdir(exist_ok=True)
     evidence = {
@@ -1714,6 +1721,7 @@ def codex_select_top_hosts(hosts: dict[str, Host], deterministic: list[Host], ou
     response_path = prompts / "top-host-selection-response.txt"
     prompt_path.write_text(json.dumps(evidence, indent=2), encoding="utf-8")
     if not model or not command_exists("codex"):
+        status["fallback_reason"] = "Codex not selected" if not model else "codex CLI unavailable"
         response_path.write_text("Codex unavailable; deterministic prioritization used.\n", encoding="utf-8")
         return deterministic
     schema = prompts / "top-host-selection-schema.json"
@@ -1726,7 +1734,9 @@ def codex_select_top_hosts(hosts: dict[str, Host], deterministic: list[Host], ou
     prompt = "Return JSON only matching the provided schema.\n" + prompt_path.read_text(encoding="utf-8")
     cmd = ["codex", "exec", "--model", model, "--output-schema", str(schema), "--output-last-message", str(response_path), prompt]
     record = run_command(cmd, outdir, "codex_top_hosts", timeout=240)
+    status["invoked"] = True
     if record["exit_code"] != 0 or not response_path.exists():
+        status["fallback_reason"] = "Codex subprocess failed"
         warn("Codex top-host selection failed; using deterministic prioritization.")
         return ensure_required_top_hosts(deterministic, hosts, dc_candidates)
     try:
@@ -1736,8 +1746,14 @@ def codex_select_top_hosts(hosts: dict[str, Host], deterministic: list[Host], ou
             ip = str(item.get("ip", ""))
             if ip in hosts and ip not in [h.ip for h in selected]:
                 selected.append(hosts[ip])
+        if selected:
+            status.update({"succeeded": True, "fallback_used": False, "fallback_reason": ""})
+        else:
+            status["fallback_reason"] = "Codex returned no usable hosts"
         return ensure_required_top_hosts(selected or deterministic, hosts, dc_candidates)
     except Exception as exc:
+        status["fallback_reason"] = f"Codex response was malformed or unusable: {exc}"
+        warn("Codex returned malformed or unusable prioritization; using deterministic prioritization.")
         append_jsonl(outdir / "events.jsonl", {"time": utc_now(), "source": "codex", "error": str(exc)})
         return ensure_required_top_hosts(deterministic, hosts, dc_candidates)
 
@@ -2663,6 +2679,7 @@ def render_scan_details_tab(
         "nxc_protocols": scan_meta.get("nxc", {}).get("selected_protocols", []),
         "screenshot_status": screenshot_summary.get("status", "no"),
         "partial_results": scan_meta.get("performance", {}).get("timeouts", []) != [],
+        "codex": scan_meta.get("codex", {}),
     }
     return f"""
 <section class="tab-panel" id="tab-scan-details" role="tabpanel" aria-labelledby="tab-scan-details-btn">
@@ -2671,7 +2688,7 @@ def render_scan_details_tab(
     <div class="muted">Routing, tool versions, Codex settings, DC evidence, and other technical context live here.</div>
   </div>
   <div class="section-grid">
-    <div class="panel"><strong>Selected interface</strong><div>{esc(ctx['interface'])}</div><div class="muted">Codex profile: {esc(profile.get('reasoning_profile', ''))} | model: {esc(profile.get('model', ''))}</div></div>
+    <div class="panel"><strong>Selected interface</strong><div>{esc(ctx['interface'])}</div><div class="muted">Codex profile: {esc(profile.get('reasoning_profile', ''))} | model: {esc(profile.get('model', ''))} | status: {esc('succeeded' if profile.get('succeeded') else ('fallback' if profile.get('fallback_used') else 'not selected'))}</div></div>
     <div class="panel"><strong>Validated networks</strong><div>{''.join(f"<span class='pill'>{esc(net)}</span>" for net in validated_networks) or '<span class=\"muted\">none</span>'}</div></div>
     <div class="panel"><strong>Excluded routes</strong><div class="muted">{esc('; '.join(ctx.get('route_excluded_networks', [])) or 'none')}</div></div>
     <div class="panel"><strong>Route warnings</strong><div>{esc(len(overlap_warnings))}</div><div class="muted">{esc('; '.join(item.get('network', '') + ' -> ' + (item.get('effective_dev') or 'unknown') for item in overlap_warnings) or 'none')}</div></div>
@@ -3079,6 +3096,7 @@ def render_report(
         "findings": findings,
         "nxc": nxc_summary,
         "performance": performance_summary,
+        "codex": profile,
     }
     scan_details_tab = render_scan_details_tab(ctx, profile, deps, dc_candidates, performance_summary, screenshot_summary, scan_meta)
     try:
@@ -3162,7 +3180,8 @@ def main() -> int:
     quick_scan(hosts, ctx, outdir, args.dry_run, performance)
     dc_candidates = discover_domain_controllers(ctx, hosts, outdir, performance, args.dry_run)
     top_hosts = classify_and_rank(hosts, ctx["gateways"], dc_candidates)
-    top_hosts = codex_select_top_hosts(hosts, top_hosts, outdir, args.codex_model, args.codex_reasoning, dc_candidates)
+    codex_status: dict[str, Any] = {}
+    top_hosts = codex_select_top_hosts(hosts, top_hosts, outdir, args.codex_model, args.codex_reasoning, dc_candidates, codex_status)
     top_hosts = ensure_required_top_hosts(top_hosts, hosts, dc_candidates)
     write_top_hosts(top_hosts, outdir, ctx, dc_candidates)
     info(f"Prioritization: selected {len(top_hosts)} host(s)")
@@ -3182,7 +3201,7 @@ def main() -> int:
     final = {
         "run_id": run_id,
         "authorization": {"acknowledged": True},
-        "codex": {"model": args.codex_model, "reasoning_profile": args.codex_reasoning, "reasoning_flag_supported": False},
+        "codex": {**codex_status, "selected_model_display_name": args.codex_model_display, "reasoning_flag_supported": False, "catalog_loaded": (args.codex_catalog_loaded == "true" if args.codex_catalog_loaded else None), "catalog_error": args.codex_catalog_error},
         "context": {
             "interface": ctx["interface"],
             "addresses": ctx["addresses"],

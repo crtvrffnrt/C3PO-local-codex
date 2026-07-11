@@ -7,7 +7,8 @@ C3PO Local is an interface-scoped internal network scanner. It is self-contained
 ## Components
 
 - `run.sh`: thin root entrypoint.
-- `bin/run.sh`: startup UX, authorization banner, Codex profile selection, and Python scanner invocation.
+- `bin/run.sh`: startup UX, authorization banner, dynamic Codex selection, and Python scanner invocation.
+- `pipeline/codex_catalog.py`: one-shot structured catalog loading, validation, and interactive selection.
 - `pipeline/local_scanner.py`: scope derivation, discovery, Nmap/Nuclei orchestration, top-host prioritization, Codex interpretation fallback, artifact writing, and HTML reporting.
 - `tools/nxc_phase.py`: standalone safe NetExec/NXC wrapper with protocol targeting, capability snapshots, safety gates, raw logs, JSONL events/findings, and summary JSON.
 - `scripts/validate.sh`: lightweight local dependency and repository sanity checks.
