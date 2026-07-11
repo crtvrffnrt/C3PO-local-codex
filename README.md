@@ -16,7 +16,7 @@
 
 # C3PO Local Network Scanner
 
-C3PO Local is a self-contained scanner for authorized internal networks. It derives scope from a selected Linux interface, discovers reachable local hosts, ranks up to 10 high-priority systems, runs deeper safe enumeration only against those hosts, and writes a standalone HTML report.
+C3PO Local is a scanner for authorized internal networks. It derives scope from a selected Linux interface, discovers reachable local hosts, ranks up to 10 high-priority systems, runs deeper safe enumeration only against those hosts, and writes a standalone HTML report.
 
 It is aimed at pre-authentication and unauthenticated reconnaissance of internal infrastructure, including Windows-oriented environments such as domain-controller and common server networks where valid credentials may not be available.
 
